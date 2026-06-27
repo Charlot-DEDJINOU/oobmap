@@ -154,3 +154,12 @@ class SessionStore:
             (check_id, dbms, place, param, status, time.time()),
         )
         self.conn.commit()
+
+    def catalog_key(self, dbms: str, database: str | None, kind: str, table: str | None = None) -> str:
+        return fingerprint(self.target, dbms, database or "", kind, table or "")
+
+    def get_catalog(self, dbms: str, database: str | None, kind: str, table: str | None = None):
+        return self.get_kv("catalog", self.catalog_key(dbms, database, kind, table))
+
+    def save_catalog(self, dbms: str, database: str | None, kind: str, values, table: str | None = None):
+        self.set_kv("catalog", self.catalog_key(dbms, database, kind, table), values)

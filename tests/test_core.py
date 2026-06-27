@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from oobmap.oob import InteractshLog
+from oobmap.cli import split_dump_row
 from oobmap.requester import current_value, inject, injection_points, parse_raw_request
 from oobmap.session import SessionStore
 
@@ -116,6 +117,17 @@ class SessionTests(unittest.TestCase):
             second = SessionStore(tmpdir, req, False, flush=True)
             self.assertIsNone(second.get_kv("test", "key"))
             second.close()
+
+
+class DumpFormattingTests(unittest.TestCase):
+    def test_split_dump_row_preserves_separator_in_last_column(self):
+        self.assertEqual(
+            split_dump_row("admin|sec|ret", 2),
+            ["admin", "sec|ret"],
+        )
+
+    def test_split_dump_row_pads_missing_columns(self):
+        self.assertEqual(split_dump_row("admin", 2), ["admin", ""])
 
 
 if __name__ == "__main__":

