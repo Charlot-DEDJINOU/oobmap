@@ -4,6 +4,7 @@ from pathlib import Path
 
 from oobmap.oob import InteractshLog
 from oobmap.requester import current_value, inject, injection_points, parse_raw_request
+from oobmap.session import SessionStore
 
 
 class RequesterTests(unittest.TestCase):
@@ -72,6 +73,49 @@ class InteractshLogTests(unittest.TestCase):
         log.offset = 0
         token = log.find_any({"run-p01-c73": "s", "run-p01-c61": "a"})
         self.assertEqual(token, "run-p01-c73")
+
+
+class SessionTests(unittest.TestCase):
+    def test_extraction_resume_state(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_path = Path(tmpdir) / "req.txt"
+            req_path.write_text(
+                "GET / HTTP/1.1\n"
+                "Host: example.test\n"
+                "Cookie: TrackingId=guest\n"
+                "\n"
+            )
+            req = parse_raw_request(str(req_path))
+            session = SessionStore(tmpdir, req, False)
+            extraction_id = session.extraction_id("mssql", "cookie", "TrackingId", "SELECT password", "abc")
+            session.save_extraction(
+                extraction_id,
+                "mssql",
+                "cookie",
+                "TrackingId",
+                "SELECT password",
+                "abc",
+                "secr",
+                False,
+            )
+            saved = session.get_extraction(extraction_id)
+            self.assertEqual(saved["value"], "secr")
+            self.assertEqual(saved["completed"], 0)
+            self.assertTrue(session.path.exists())
+            session.close()
+
+    def test_flush_session_removes_previous_state(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_path = Path(tmpdir) / "req.txt"
+            req_path.write_text("GET / HTTP/1.1\nHost: example.test\n\n")
+            req = parse_raw_request(str(req_path))
+            first = SessionStore(tmpdir, req, False)
+            first.set_kv("test", "key", {"value": 1})
+            first.close()
+
+            second = SessionStore(tmpdir, req, False, flush=True)
+            self.assertIsNone(second.get_kv("test", "key"))
+            second.close()
 
 
 if __name__ == "__main__":

