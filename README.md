@@ -33,14 +33,48 @@ export PATH="$PATH:$HOME/go/bin"
 
 ## Installation
 
+### Option 1: pipx
+
+Recommended for most users:
+
+```bash
+pipx install git+https://github.com/Charlot-DEDJINOU/oobmap.git
+```
+
+Then:
+
+```bash
+oobmap --help
+```
+
+### Option 2: pip
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install git+https://github.com/Charlot-DEDJINOU/oobmap.git
+oobmap --help
+```
+
+### Option 3: from source
+
 Clone the repository:
 
 ```bash
-git clone https://github.com/<you>/oobmap.git
+git clone https://github.com/Charlot-DEDJINOU/oobmap.git
 cd oobmap
 ```
 
-Run directly:
+Install it in editable mode:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e .
+oobmap --help
+```
+
+You can also run it directly without installation:
 
 ```bash
 python3 oobmap.py --help
@@ -52,8 +86,7 @@ Or create a shell alias:
 alias oobmap='python3 /absolute/path/to/oobmap/oobmap.py'
 ```
 
-The project currently uses only the Python standard library, so there are no
-Python dependencies to install.
+The project currently uses only the Python standard library at runtime.
 
 ## Quick Start
 
