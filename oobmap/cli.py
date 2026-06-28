@@ -42,14 +42,14 @@ def build_expression(args) -> str:
     if not (column and table):
         raise SystemExit("dump requires -T/--table and -C/--column")
 
-    if args.dbms == "mssql":
+    if args.dbms in ("mssql", "mssql-cmdshell"):
         expr = f"SELECT TOP 1 {column} FROM {table}"
     else:
         expr = f"SELECT {column} FROM {table}"
 
     if where:
         expr += f" WHERE {where}"
-    if args.dbms != "mssql":
+    if args.dbms not in ("mssql", "mssql-cmdshell"):
         expr += " LIMIT 1"
     return expr
 
@@ -157,6 +157,10 @@ def check(args) -> int:
         finally:
             session.close()
 
+    tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
+    unknown = [t for t in tamper_names if t not in TAMPERS]
+    if unknown:
+        raise SystemExit(f"unknown tamper(s): {', '.join(unknown)}. Run 'oobmap tampers' for the list.")
     profile = PROFILES[args.dbms]
     request = parse_raw_request(args.request)
     domain = normalize_domain(args.domain)
