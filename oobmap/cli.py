@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import __version__
 from .dbms import DBMS
-from .oob import InteractshLog
+from .oob import InteractshLog, MultiInteractshLog
 from .payloads import PROFILES
 from .requester import current_value, inject, injection_points, parse_raw_request, send
 from .session import SessionStore
@@ -57,7 +57,7 @@ def load_common(args):
     profile = PROFILES[args.dbms]
     request = parse_raw_request(args.request)
     domain = normalize_domain(args.domain)
-    log = InteractshLog(args.log)
+    log = MultiInteractshLog(args.log) if len(args.log) > 1 else InteractshLog(args.log[0])
     run_id = args.run_id or uuid.uuid4().hex[:6]
     if args.base is None:
         args.base = current_value(request, args.param, args.place)
@@ -117,7 +117,7 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
     print(f"[+] profile: {profile.name}")
     print(f"[+] {profile.comment}")
     print(f"[+] run id: {run_id}")
-    print(f"[+] watching: {args.log}")
+    print(f"[+] watching: {', '.join(args.log)}")
     print(f"[+] target: {args.place}:{args.param}")
 
     true_token = f"{run_id}-true"
@@ -159,7 +159,7 @@ def check(args) -> int:
     profile = PROFILES[args.dbms]
     request = parse_raw_request(args.request)
     domain = normalize_domain(args.domain)
-    log = InteractshLog(args.log)
+    log = MultiInteractshLog(args.log) if len(args.log) > 1 else InteractshLog(args.log[0])
     session = SessionStore(args.output_dir, request, args.force_ssl, flush=args.flush_session)
     points = injection_points(request, args.level)
     if not points:
@@ -212,7 +212,7 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     print(f"[+] run id: {run_id}")
     print(f"[+] expression: {expression}")
     print(f"[+] domain: {domain}")
-    print(f"[+] watching: {args.log}")
+    print(f"[+] watching: {', '.join(args.log)}")
     print(f"[+] session: {session.path}")
 
     for pos in range(start_pos, max_len + 1):
@@ -510,7 +510,13 @@ def add_common(parser):
         help="OOB payload profile",
     )
     parser.add_argument("--domain", required=True, help="interactsh domain")
-    parser.add_argument("--log", required=True, help="interactsh JSONL log path")
+    parser.add_argument(
+        "--log",
+        action="append",
+        required=True,
+        metavar="PATH",
+        help="interactsh JSONL log path (repeatable for multiple sources)",
+    )
     parser.add_argument("--base", help="base/original value before the payload; defaults to the current target value")
     parser.add_argument("--force-ssl", action="store_true", help="send request over HTTPS")
     parser.add_argument("--http-timeout", type=float, default=10.0)

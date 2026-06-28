@@ -40,3 +40,24 @@ class InteractshLog:
                 return token
             time.sleep(0.5)
         return None
+
+
+class MultiInteractshLog:
+    def __init__(self, paths: list[str]):
+        self._logs = [InteractshLog(p) for p in paths]
+
+    def find_any(self, token_map: dict[str, str]) -> str | None:
+        for log in self._logs:
+            result = log.find_any(token_map)
+            if result:
+                return result
+        return None
+
+    def wait_any(self, token_map: dict[str, str], timeout: float) -> str | None:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            result = self.find_any(token_map)
+            if result:
+                return result
+            time.sleep(0.5)
+        return None
