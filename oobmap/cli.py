@@ -14,6 +14,7 @@ from .oob import InteractshLog
 from .payloads import PROFILES
 from .requester import current_value, inject, injection_points, parse_raw_request, send
 from .session import SessionStore
+from .tamper import TAMPERS, apply_tampers
 
 
 DEFAULT_ALPHABET = string.ascii_lowercase + string.digits
@@ -61,10 +62,17 @@ def load_common(args):
     if args.base is None:
         args.base = current_value(request, args.param, args.place)
     session = SessionStore(args.output_dir, request, args.force_ssl, flush=args.flush_session)
+    tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
+    unknown = [t for t in tamper_names if t not in TAMPERS]
+    if unknown:
+        raise SystemExit(f"unknown tamper(s): {', '.join(unknown)}. Run 'oobmap tampers' for the list.")
     return profile, request, domain, log, run_id, session
 
 
 def send_payload(args, request, payload):
+    tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
+    if tamper_names:
+        payload = apply_tampers(payload, tamper_names)
     injected = inject(request, args.param, payload, args.place)
     try:
         status, body = send(injected, force_ssl=args.force_ssl, timeout=args.http_timeout)
@@ -515,6 +523,12 @@ def add_common(parser):
         default="batch",
         help="batch: send full alphabet per position (default); binary: bisection, ~10x fewer requests",
     )
+    parser.add_argument(
+        "--tamper",
+        default="",
+        metavar="NAMES",
+        help="comma-separated tamper scripts (run 'oobmap tampers' for list): inline-comments,randomize-case,...",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
 
 
@@ -581,7 +595,16 @@ def make_parser():
 
     p_profiles = sub.add_parser("profiles", help="list payload profiles")
     p_profiles.set_defaults(func=profiles)
+
+    p_tampers = sub.add_parser("tampers", help="list available WAF tamper scripts")
+    p_tampers.set_defaults(func=list_tampers)
     return parser
+
+
+def list_tampers(args) -> int:
+    for name, (_, description) in sorted(TAMPERS.items()):
+        print(f"{name:<22} {description}")
+    return 0
 
 
 def profiles(args) -> int:
