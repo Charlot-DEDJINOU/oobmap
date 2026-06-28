@@ -44,7 +44,8 @@ class InteractshLog:
         return None
 
     def scan_direct(self, prefix: str) -> str | None:
-        """Scan for a DNS entry whose hostname is <hex_value>.<prefix>.<domain>.
+        """Scan for a DNS entry whose hostname is <hex_labels>.<prefix>.<domain>.
+        Hex may be split across multiple dot-separated labels for long values.
         Returns the decoded value or None."""
         if not self.path.exists():
             return None
@@ -57,11 +58,12 @@ class InteractshLog:
                     if marker not in lo:
                         continue
                     idx = lo.find(marker)
-                    # walk back over hex chars
+                    # walk back over hex chars AND dots (multi-label support)
                     start = idx - 1
-                    while start >= 0 and lo[start] in "0123456789abcdef":
+                    while start >= 0 and lo[start] in "0123456789abcdef.":
                         start -= 1
-                    hex_part = lo[start + 1:idx]
+                    raw = lo[start + 1:idx]
+                    hex_part = raw.replace(".", "")  # join split labels
                     if len(hex_part) >= 2 and len(hex_part) % 2 == 0:
                         try:
                             return bytes.fromhex(hex_part).decode("utf-8", errors="replace")
