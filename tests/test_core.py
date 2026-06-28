@@ -308,5 +308,43 @@ class MultiLogTests(unittest.TestCase):
         self.assertEqual(log.find_any({"solo-tok": "s"}), "solo-tok")
 
 
+import threading
+
+
+class ThreadSafeLogTests(unittest.TestCase):
+    def _empty_log(self):
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def test_interactsh_log_has_lock(self):
+        log = InteractshLog(self._empty_log())
+        self.assertTrue(hasattr(log, "_lock"))
+        self.assertIsInstance(log._lock, type(threading.Lock()))
+
+    def test_concurrent_find_any_does_not_crash(self):
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        tmp.write('{"full-id":"tok-con.example"}\n' * 200)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        log = InteractshLog(tmp.name)
+        log.offset = 0
+        errors = []
+        def task():
+            try:
+                log.find_any({"tok-con": "x"})
+            except Exception as exc:
+                errors.append(exc)
+        threads = [threading.Thread(target=task) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(errors, [])
+
+
 if __name__ == "__main__":
     unittest.main()
