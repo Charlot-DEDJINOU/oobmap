@@ -198,5 +198,26 @@ class JsonBodyTests(unittest.TestCase):
             inject(req, "nonexistent", "x", "json")
 
 
+from oobmap.payloads import PROFILES
+
+
+class BinaryStrategyTests(unittest.TestCase):
+    def test_condition_gte_mssql(self):
+        cond = PROFILES["mssql"].condition_gte("SELECT password FROM users", 1, "m")
+        self.assertIn(">=", cond)
+        self.assertIn("'m'", cond)
+        self.assertIn("SUBSTRING", cond)
+
+    def test_condition_gte_mysql(self):
+        cond = PROFILES["mysql"].condition_gte("SELECT USER()", 1, "a")
+        self.assertIn(">=", cond)
+        self.assertIn("substr", cond.lower())
+
+    def test_condition_gte_all_profiles(self):
+        for name, profile in PROFILES.items():
+            cond = profile.condition_gte("SELECT 1", 1, "x")
+            self.assertIn(">=", cond, f"profile {name} missing >= in condition_gte")
+
+
 if __name__ == "__main__":
     unittest.main()
