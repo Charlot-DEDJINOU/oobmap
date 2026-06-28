@@ -49,7 +49,7 @@ def double_url_encode(payload: str) -> str:
 TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
     "inline-comments":    (inline_comments,    "Replace spaces with /**/"),
     "randomize-case":     (randomize_case,     "Randomly capitalize SQL keywords"),
-    "between-comments":   (between_comments,   "Split keywords: SE/**/LECT"),
+    "between-comments":   (between_comments,   "Split keywords mid-word: SEL/**/ECT"),
     "hex-encode-strings": (hex_encode_strings, "Convert 'string' literals to 0x hex"),
     "double-url-encode":  (double_url_encode,  "Double URL-encode the full payload"),
 }

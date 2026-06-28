@@ -579,7 +579,7 @@ def add_common(parser):
     )
     parser.add_argument("--base", help="base/original value before the payload; defaults to the current target value")
     parser.add_argument("--force-ssl", action="store_true", help="send request over HTTPS")
-    parser.add_argument("--http-timeout", type=float, default=10.0)
+    parser.add_argument("--http-timeout", type=float, default=10.0, help="HTTP response timeout in seconds (default: 10.0)")
     parser.add_argument("--timeout", type=float, default=8.0, help="callback wait time per probe/position")
     parser.add_argument("--run-id", help="fixed run id for reproducible debugging")
     parser.add_argument("--level", type=int, choices=range(1, 6), default=1, help="scan depth for check without -p: 1=query/body, 2=cookies, 3=common headers, 5=all headers")
@@ -602,7 +602,7 @@ def add_common(parser):
         help="comma-separated tamper scripts (run 'oobmap tampers' for list): inline-comments,randomize-case,...",
     )
     parser.add_argument("--proxy", metavar="URL",
-                        help="proxy URL: http://host:port or socks5://host:port")
+                        help="proxy URL: http://host:port (SOCKS5 requires PySocks)")
     parser.add_argument("--no-verify-ssl", action="store_true",
                         help="skip SSL certificate verification")
     parser.add_argument(
@@ -612,7 +612,7 @@ def add_common(parser):
         metavar="N",
         help="parallel position extraction threads (default: 1; recommended: 2-4)",
     )
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-v", "--verbose", action="store_true", help="print HTTP status and payload details")
 
 
 def make_parser():
@@ -625,25 +625,25 @@ def make_parser():
 
     p_check = sub.add_parser("check", help="confirm conditional OOB behavior")
     add_common(p_check)
-    p_check.add_argument("--true-condition", default="1=1")
-    p_check.add_argument("--false-condition", default="1=2")
+    p_check.add_argument("--true-condition", default="1=1", help="SQL expression that evaluates to true (default: 1=1)")
+    p_check.add_argument("--false-condition", default="1=2", help="SQL expression that evaluates to false (default: 1=2)")
     p_check.add_argument("--first", action="store_true", help="stop after the first confirmed OOB point")
     p_check.set_defaults(func=check)
 
     p_extract = sub.add_parser("extract", help="extract a scalar SQL expression")
     add_common(p_extract)
     p_extract.add_argument("--expr", required=True, help="scalar SQL expression, e.g. SELECT password FROM users WHERE username='administrator'")
-    p_extract.add_argument("--alphabet", default=DEFAULT_ALPHABET)
-    p_extract.add_argument("--max-len", type=int, default=40)
+    p_extract.add_argument("--alphabet", default=DEFAULT_ALPHABET, help=f"characters to test per position (default: a-z0-9, {len(DEFAULT_ALPHABET)} chars)")
+    p_extract.add_argument("--max-len", type=int, default=40, help="maximum length of the extracted value (default: 40)")
     p_extract.set_defaults(func=extract)
 
     p_dump = sub.add_parser("dump", help="convenience wrapper around extract")
     add_common(p_dump)
-    p_dump.add_argument("-T", "--table", required=True)
+    p_dump.add_argument("-T", "--table", required=True, help="target table name")
     p_dump.add_argument("-C", "--column", help="comma-separated columns; if omitted, oobmap enumerates columns first")
-    p_dump.add_argument("--where")
-    p_dump.add_argument("--alphabet", default=DEFAULT_ALPHABET)
-    p_dump.add_argument("--max-len", type=int, default=40)
+    p_dump.add_argument("--where", help="SQL WHERE clause to filter rows, e.g. \"username='admin'\"")
+    p_dump.add_argument("--alphabet", default=DEFAULT_ALPHABET, help=f"characters to test per position (default: a-z0-9, {len(DEFAULT_ALPHABET)} chars)")
+    p_dump.add_argument("--max-len", type=int, default=40, help="maximum value length per cell (default: 40)")
     p_dump.add_argument("--limit", type=int, default=20, help="maximum rows to dump")
     p_dump.add_argument("--enum-limit", type=int, default=50, help="maximum tables/columns to enumerate during validation")
     p_dump.add_argument("--validate", dest="validate", action="store_true", default=True, help="confirm table/columns before dumping (default)")
@@ -665,15 +665,15 @@ def make_parser():
     p_enum = sub.add_parser("enum", help="extract common DBMS metadata over OOB")
     add_common(p_enum)
     p_enum.add_argument("--dbs", action="store_true", help="enumerate accessible databases/schemas")
-    p_enum.add_argument("--banner", action="store_true")
-    p_enum.add_argument("--current-user", action="store_true")
-    p_enum.add_argument("--current-db", action="store_true")
+    p_enum.add_argument("--banner", action="store_true", help="extract DBMS version banner")
+    p_enum.add_argument("--current-user", action="store_true", help="extract the current database user")
+    p_enum.add_argument("--current-db", action="store_true", help="extract the current database/schema name")
     p_enum.add_argument("--tables", action="store_true", help="enumerate table names")
     p_enum.add_argument("--columns", action="store_true", help="enumerate column names for -T/--table")
     p_enum.add_argument("-T", "--table", help="table name for --columns")
-    p_enum.add_argument("--limit", type=int, default=20, help="maximum rows to enumerate for --tables/--columns")
-    p_enum.add_argument("--alphabet", default=ENUM_ALPHABET)
-    p_enum.add_argument("--max-len", type=int, default=120)
+    p_enum.add_argument("--limit", type=int, default=20, help="maximum items to enumerate for --dbs/--tables/--columns (default: 20)")
+    p_enum.add_argument("--alphabet", default=ENUM_ALPHABET, help="characters to test per position (default: extended set including spaces and symbols)")
+    p_enum.add_argument("--max-len", type=int, default=120, help="maximum value length per metadata item (default: 120)")
     p_enum.set_defaults(func=enum)
 
     p_profiles = sub.add_parser("profiles", help="list payload profiles")

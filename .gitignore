@@ -23,3 +23,6 @@ interactsh.log
 .DS_Store
 .idea/
 .vscode/
+
+docs/
+.superpowers/
