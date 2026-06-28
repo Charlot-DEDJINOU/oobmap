@@ -271,5 +271,42 @@ class ProxySupportTests(unittest.TestCase):
         self.assertTrue(inspect.signature(send).parameters["verify_ssl"].default)
 
 
+from oobmap.oob import InteractshLog, MultiInteractshLog
+
+
+class MultiLogTests(unittest.TestCase):
+    def _write_jsonl(self, content):
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        tmp.write(content)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def test_find_token_in_first_log(self):
+        p1 = self._write_jsonl('{"full-id":"tok-aaa.example"}\n')
+        p2 = self._write_jsonl("")
+        log = MultiInteractshLog([p1, p2])
+        log._logs[0].offset = 0
+        self.assertEqual(log.find_any({"tok-aaa": "a"}), "tok-aaa")
+
+    def test_find_token_in_second_log(self):
+        p1 = self._write_jsonl("")
+        p2 = self._write_jsonl('{"full-id":"tok-bbb.example"}\n')
+        log = MultiInteractshLog([p1, p2])
+        log._logs[1].offset = 0
+        self.assertEqual(log.find_any({"tok-bbb": "b"}), "tok-bbb")
+
+    def test_find_returns_none_when_no_match(self):
+        log = MultiInteractshLog([self._write_jsonl(""), self._write_jsonl("")])
+        self.assertIsNone(log.find_any({"missing": "x"}))
+
+    def test_single_log_path_works(self):
+        p = self._write_jsonl('{"full-id":"solo-tok.example"}\n')
+        log = MultiInteractshLog([p])
+        log._logs[0].offset = 0
+        self.assertEqual(log.find_any({"solo-tok": "s"}), "solo-tok")
+
+
 if __name__ == "__main__":
     unittest.main()
