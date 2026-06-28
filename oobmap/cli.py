@@ -1,8 +1,12 @@
 import argparse
 import copy
+import csv
+import io
+import json
 import string
 import sys
 import uuid
+from pathlib import Path
 
 from . import __version__
 from .dbms import DBMS
@@ -264,14 +268,11 @@ def dump(args) -> int:
         output = formatter[args.output_format](columns, rows)
 
         if args.output_file:
-            from pathlib import Path as _Path
-            _Path(args.output_file).write_text(output, encoding="utf-8")
+            Path(args.output_file).write_text(output, encoding="utf-8")
             print(f"[+] saved to {args.output_file}", file=sys.stderr)
-
-        if args.output_format == "table":
-            print("\n[+] dump result")
-            print(output)
-        elif not args.output_file:
+        else:
+            if args.output_format == "table":
+                print("\n[+] dump result")
             print(output)
     return 0
 
@@ -315,12 +316,10 @@ def format_table(columns: list[str], rows: list[list[str]]) -> str:
 
 
 def format_json(columns: list[str], rows: list[list[str]]) -> str:
-    import json as _json
-    return _json.dumps([dict(zip(columns, row)) for row in rows], indent=2)
+    return json.dumps([dict(zip(columns, row)) for row in rows], indent=2)
 
 
 def format_csv(columns: list[str], rows: list[list[str]]) -> str:
-    import csv, io
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(columns)

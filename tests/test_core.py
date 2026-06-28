@@ -216,7 +216,8 @@ class OutputFormatTests(unittest.TestCase):
     def test_format_json_all_rows(self):
         import json
         data = json.loads(format_json(self.columns, self.rows))
-        self.assertEqual(len(data), 2)
+        self.assertEqual(data[1]["username"], "alice")
+        self.assertEqual(data[1]["password"], "p4ss")
 
     def test_format_csv_header(self):
         lines = format_csv(self.columns, self.rows).strip().splitlines()
