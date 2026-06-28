@@ -122,6 +122,33 @@ class DbmsProfile:
             )
         raise ValueError(f"dump is not implemented for {self.name}")
 
+    def dbs_expression(self, index: int) -> str:
+        if self.name == "mysql":
+            return (
+                "SELECT schema_name FROM information_schema.schemata "
+                f"ORDER BY schema_name LIMIT 1 OFFSET {index}"
+            )
+        if self.name == "mssql":
+            return (
+                "SELECT name FROM ("
+                "SELECT name, ROW_NUMBER() OVER (ORDER BY name) AS rn "
+                "FROM master.sys.databases"
+                f") AS t WHERE rn={index + 1}"
+            )
+        if self.name == "postgres-program":
+            return (
+                "SELECT datname FROM pg_database "
+                f"WHERE datistemplate=false ORDER BY datname LIMIT 1 OFFSET {index}"
+            )
+        if self.name == "oracle-http":
+            return (
+                "SELECT username FROM ("
+                "SELECT username, ROW_NUMBER() OVER (ORDER BY username) AS rn "
+                "FROM all_users"
+                f") WHERE rn={index + 1}"
+            )
+        raise ValueError(f"dbs enumeration is not implemented for {self.name}")
+
     def concat_columns(self, columns: list[str]) -> str:
         pieces = [self.cast_text(column) for column in columns]
         separator = sql_string("|")

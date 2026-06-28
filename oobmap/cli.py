@@ -272,6 +272,8 @@ def enum(args) -> int:
     flush_session_once(args)
     dbms = DBMS[args.dbms]
     selected = []
+    if args.dbs:
+        selected.append("dbs")
     for option, key in (
         (args.banner, "banner"),
         (args.current_user, "current_user"),
@@ -284,9 +286,15 @@ def enum(args) -> int:
     if args.columns:
         selected.append("columns")
     if not selected:
-        raise SystemExit("enum requires at least one of --banner, --current-user, --current-db, --tables, --columns")
+        raise SystemExit("enum requires at least one of --dbs, --banner, --current-user, --current-db, --tables, --columns")
 
     for key in selected:
+        if key == "dbs":
+            values = enumerate_rows(args, "database", lambda index: dbms.dbs_expression(index))
+            save_catalog_values(args, "dbs", values)
+            if values:
+                print(f"[+] databases: {', '.join(values)}")
+            continue
         if key == "tables":
             values = enumerate_rows(args, "table", lambda index: dbms.table_expression(index, args.database))
             save_catalog_values(args, "tables", values)
@@ -481,6 +489,7 @@ def make_parser():
 
     p_enum = sub.add_parser("enum", help="extract common DBMS metadata over OOB")
     add_common(p_enum)
+    p_enum.add_argument("--dbs", action="store_true", help="enumerate accessible databases/schemas")
     p_enum.add_argument("--banner", action="store_true")
     p_enum.add_argument("--current-user", action="store_true")
     p_enum.add_argument("--current-db", action="store_true")
