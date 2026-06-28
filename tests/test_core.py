@@ -253,5 +253,23 @@ class BinaryStrategyTests(unittest.TestCase):
             self.assertIn(">=", cond, f"profile {name} missing >= in condition_gte")
 
 
+import inspect
+from oobmap.requester import send
+
+
+class ProxySupportTests(unittest.TestCase):
+    def test_send_has_proxy_param(self):
+        self.assertIn("proxy", inspect.signature(send).parameters)
+
+    def test_send_proxy_default_is_none(self):
+        self.assertIsNone(inspect.signature(send).parameters["proxy"].default)
+
+    def test_send_has_verify_ssl_param(self):
+        self.assertIn("verify_ssl", inspect.signature(send).parameters)
+
+    def test_send_verify_ssl_default_is_true(self):
+        self.assertTrue(inspect.signature(send).parameters["verify_ssl"].default)
+
+
 if __name__ == "__main__":
     unittest.main()
