@@ -1,6 +1,4 @@
-import http.client
 import json
-import ssl
 from dataclasses import dataclass, replace
 from urllib.parse import parse_qsl, quote_plus, unquote_plus, urlencode, urlsplit, urlunsplit
 
@@ -314,36 +312,59 @@ def inject_marker(req: RawRequest, value: str) -> RawRequest:
     return replace(req, target=target, headers=headers, body=body)
 
 
-def send(req: RawRequest, force_ssl: bool = False, timeout: float = 10.0) -> tuple[int, bytes]:
+def send(req: RawRequest, force_ssl: bool = False, timeout: float = 10.0,
+         proxy: str | None = None, verify_ssl: bool = True) -> tuple[int, bytes]:
+    import urllib.request
+    import urllib.error
+    import ssl as _ssl
+
     host = req.host
     scheme = "https" if force_ssl else "http"
-    port = 443 if force_ssl else 80
-    if ":" in host and not host.startswith("["):
-        host_only, raw_port = host.rsplit(":", 1)
-        if raw_port.isdigit():
-            host = host_only
-            port = int(raw_port)
 
     target = req.target
-    if target.startswith("http://") or target.startswith("https://"):
+    if target.startswith(("http://", "https://")):
         parsed = urlsplit(target)
         scheme = parsed.scheme
-        host = parsed.hostname or host
-        port = parsed.port or (443 if scheme == "https" else 80)
-        target = urlunsplit(("", "", parsed.path or "/", parsed.query, parsed.fragment))
+        host = parsed.netloc or host
+        path = urlunsplit(("", "", parsed.path or "/", parsed.query, parsed.fragment))
+    else:
+        path = target
 
-    conn_cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
-    kwargs = {"timeout": timeout}
-    if scheme == "https":
-        kwargs["context"] = ssl.create_default_context()
-    conn = conn_cls(host, port, **kwargs)
-    headers = {name: value for name, value in req.headers if name.lower() not in ("host", "content-length")}
-    headers["Host"] = req.host
+    url = f"{scheme}://{host}{path}"
+
+    handlers: list = []
+    handlers.append(urllib.request.ProxyHandler(
+        {"http": proxy, "https": proxy} if proxy else {}
+    ))
+
+    if not verify_ssl:
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        handlers.append(urllib.request.HTTPSHandler(context=ctx))
+
+    class _NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    handlers.append(_NoRedirect())
+    opener = urllib.request.build_opener(*handlers)
+
+    headers_dict = {
+        name: value
+        for name, value in req.headers
+        if name.lower() not in ("host", "content-length")
+    }
+    ureq = urllib.request.Request(url, data=req.body or None,
+                                  headers=headers_dict, method=req.method)
+    ureq.add_unredirected_header("Host", req.host)
     if req.body:
-        headers["Content-Length"] = str(len(req.body))
-    conn.request(req.method, target, body=req.body or None, headers=headers)
-    response = conn.getresponse()
-    body = response.read()
-    status = response.status
-    conn.close()
-    return status, body
+        ureq.add_unredirected_header("Content-Length", str(len(req.body)))
+
+    try:
+        with opener.open(ureq, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read() or b""
+    except urllib.error.URLError as exc:
+        raise ConnectionError(str(exc.reason)) from exc

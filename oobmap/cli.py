@@ -75,7 +75,13 @@ def send_payload(args, request, payload):
         payload = apply_tampers(payload, tamper_names)
     injected = inject(request, args.param, payload, args.place)
     try:
-        status, body = send(injected, force_ssl=args.force_ssl, timeout=args.http_timeout)
+        status, body = send(
+            injected,
+            force_ssl=args.force_ssl,
+            timeout=args.http_timeout,
+            proxy=getattr(args, "proxy", None),
+            verify_ssl=not getattr(args, "no_verify_ssl", False),
+        )
         if args.verbose:
             print(f"[http] {status} {len(body)} bytes")
     except Exception as exc:
@@ -529,6 +535,10 @@ def add_common(parser):
         metavar="NAMES",
         help="comma-separated tamper scripts (run 'oobmap tampers' for list): inline-comments,randomize-case,...",
     )
+    parser.add_argument("--proxy", metavar="URL",
+                        help="proxy URL: http://host:port or socks5://host:port")
+    parser.add_argument("--no-verify-ssl", action="store_true",
+                        help="skip SSL certificate verification")
     parser.add_argument("-v", "--verbose", action="store_true")
 
 
