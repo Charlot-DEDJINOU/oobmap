@@ -17,6 +17,9 @@ class Profile:
     def condition(self, expression: str, pos: int, char: str) -> str:
         return f"{self.substring(expression, pos)}='{char}'"
 
+    def condition_gte(self, expression: str, pos: int, char: str) -> str:
+        return f"{self.substring(expression, pos)}>='{char}'"
+
     def payload(self, base: str, condition: str, callback_host: str) -> str:
         if self.name == "sqlite-lab":
             return (
