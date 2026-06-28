@@ -198,6 +198,39 @@ class JsonBodyTests(unittest.TestCase):
             inject(req, "nonexistent", "x", "json")
 
 
+from oobmap.cli import format_json, format_csv
+
+
+class OutputFormatTests(unittest.TestCase):
+    def setUp(self):
+        self.columns = ["username", "password"]
+        self.rows = [["admin", "s3cr3t"], ["alice", "p4ss"]]
+
+    def test_format_json_structure(self):
+        import json
+        data = json.loads(format_json(self.columns, self.rows))
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]["username"], "admin")
+        self.assertEqual(data[0]["password"], "s3cr3t")
+
+    def test_format_json_all_rows(self):
+        import json
+        data = json.loads(format_json(self.columns, self.rows))
+        self.assertEqual(len(data), 2)
+
+    def test_format_csv_header(self):
+        lines = format_csv(self.columns, self.rows).strip().splitlines()
+        self.assertEqual(lines[0], "username,password")
+
+    def test_format_csv_row_count(self):
+        lines = format_csv(self.columns, self.rows).strip().splitlines()
+        self.assertEqual(len(lines), 3)
+
+    def test_format_csv_pipe_in_value_preserved(self):
+        rows = [["admin", "pass|word"]]
+        self.assertIn("pass|word", format_csv(["username", "password"], rows))
+
+
 from oobmap.payloads import PROFILES
 
 
