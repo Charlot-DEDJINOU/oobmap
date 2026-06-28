@@ -80,10 +80,13 @@ class DbmsProfile:
                 f"FROM all_tab_columns WHERE table_name={upper}{owner_filter}"
                 f") WHERE rn={index + 1}"
             )
-        if self.name == "sqlite-lab":
-            # SQLite PRAGMA cannot be used as a scalar subquery in this context.
-            # The local training lab is intentionally focused on extraction basics.
-            raise ValueError("columns are not implemented for sqlite-lab")
+        if self.name in ("sqlite-lab", "sqlite-http"):
+            # PRAGMA table_info() cannot be a subquery, but pragma_table_info()
+            # is a table-valued function (SQLite >= 3.16) that can.
+            return (
+                f"SELECT name FROM pragma_table_info('{table}') "
+                f"ORDER BY cid LIMIT 1 OFFSET {index}"
+            )
         raise ValueError(f"columns are not implemented for {self.name}")
 
     def dump_expression(

