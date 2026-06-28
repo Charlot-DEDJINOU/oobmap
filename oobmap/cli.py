@@ -624,21 +624,41 @@ def run(args) -> int:
     return check(args)
 
 
-_BANNER = f"""\
-     ___  ___  ___  __  __   _   ___
-    / _ \\/ _ \\| _ )|  \\/  | /_\\ | _ \\
-   | (_) | (_) | _ \\ |\\/| |/ _ \\|  _/
-    \\___/ \\___/|___/_|  |_/_/ \\_\\_|    {{v{__version__}}}
+_ART = [
+    "     ___  ___  ___  __  __   _   ___",
+    "    / _ \\/ _ \\| _ )|  \\/  | /_\\ | _ \\",
+    "   | (_) | (_) | _ \\ |\\/| |/ _ \\|  _/",
+    f"    \\___/ \\___/|___/_|  |_/_/ \\_\\_|    {{v{__version__}}}",
+]
+_SUBTITLE = "    OOB blind SQLi extractor — powered by interactsh"
 
-    OOB blind SQLi extractor — powered by interactsh
-"""
+
+def _banner() -> str:
+    if sys.stdout.isatty():
+        c  = "\033[1;36m"   # bold cyan  — logo
+        v  = "\033[1;33m"   # bold yellow — version tag
+        s  = "\033[0;37m"   # light grey  — subtitle
+        r  = "\033[0m"
+        art = "\n".join(
+            # color the version tag separately on the last art line
+            line.replace(f"{{v{__version__}}}", f"{r}{v}{{v{__version__}}}{r}{c}")
+            .join([c, r])
+            for line in _ART
+        )
+        return f"\n{art}\n\n{s}{_SUBTITLE}{r}\n"
+    return "\n" + "\n".join(_ART) + f"\n\n{_SUBTITLE}\n"
+
+
+class _Formatter(argparse.RawDescriptionHelpFormatter):
+    def _format_usage(self, usage, actions, groups, prefix):
+        return _banner() + f"Usage: {self._prog} [options]\n\n"
 
 
 def make_parser():
     parser = argparse.ArgumentParser(
         prog="oobmap",
-        description=_BANNER,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=None,
+        formatter_class=_Formatter,
     )
     parser.add_argument("--version", action="version", version=f"oobmap {__version__}")
     parser.set_defaults(func=run)
