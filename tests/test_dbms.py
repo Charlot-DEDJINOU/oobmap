@@ -99,5 +99,36 @@ class NewProfileTests(unittest.TestCase):
         )
 
 
+class DbsExpressionTests(unittest.TestCase):
+    def test_mysql_dbs_expression_offset(self):
+        expr = DBMS["mysql"].dbs_expression(0)
+        self.assertIn("information_schema.schemata", expr)
+        self.assertIn("OFFSET 0", expr)
+
+    def test_mysql_dbs_expression_index(self):
+        self.assertIn("OFFSET 3", DBMS["mysql"].dbs_expression(3))
+
+    def test_mssql_dbs_expression(self):
+        expr = DBMS["mssql"].dbs_expression(0)
+        self.assertIn("sys.databases", expr)
+        self.assertIn("rn=1", expr)
+
+    def test_postgres_dbs_expression(self):
+        self.assertIn("pg_database", DBMS["postgres-program"].dbs_expression(0))
+
+    def test_oracle_dbs_expression(self):
+        self.assertIn("all_users", DBMS["oracle-http"].dbs_expression(0))
+
+    def test_sqlite_dbs_expression_raises(self):
+        with self.assertRaises(ValueError):
+            DBMS["sqlite-lab"].dbs_expression(0)
+
+    def test_postgres_dblink_alias_matches_parent(self):
+        self.assertEqual(
+            DBMS["postgres-dblink"].dbs_expression(0),
+            DBMS["postgres-program"].dbs_expression(0),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
