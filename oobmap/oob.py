@@ -43,6 +43,41 @@ class InteractshLog:
             time.sleep(0.5)
         return None
 
+    def scan_direct(self, prefix: str) -> str | None:
+        """Scan for a DNS entry whose hostname is <hex_value>.<prefix>.<domain>.
+        Returns the decoded value or None."""
+        if not self.path.exists():
+            return None
+        marker = f".{prefix}."
+        with self._lock:
+            with self.path.open("r", encoding="utf-8", errors="ignore") as f:
+                f.seek(self.offset)
+                for line in f:
+                    lo = line.lower()
+                    if marker not in lo:
+                        continue
+                    idx = lo.find(marker)
+                    # walk back over hex chars
+                    start = idx - 1
+                    while start >= 0 and lo[start] in "0123456789abcdef":
+                        start -= 1
+                    hex_part = lo[start + 1:idx]
+                    if len(hex_part) >= 2 and len(hex_part) % 2 == 0:
+                        try:
+                            return bytes.fromhex(hex_part).decode("utf-8", errors="replace")
+                        except ValueError:
+                            pass
+        return None
+
+    def find_direct(self, prefix: str, timeout: float) -> str | None:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            result = self.scan_direct(prefix)
+            if result is not None:
+                return result
+            time.sleep(0.5)
+        return None
+
 
 class MultiInteractshLog:
     def __init__(self, paths: list[str]):
@@ -61,5 +96,15 @@ class MultiInteractshLog:
             result = self.find_any(token_map)
             if result:
                 return result
+            time.sleep(0.5)
+        return None
+
+    def find_direct(self, prefix: str, timeout: float) -> str | None:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            for log in self._logs:
+                result = log.scan_direct(prefix)
+                if result is not None:
+                    return result
             time.sleep(0.5)
         return None
