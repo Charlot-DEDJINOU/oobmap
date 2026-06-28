@@ -26,9 +26,24 @@ def _ts() -> str:
     return datetime.datetime.now().strftime("%H:%M:%S")
 
 
+_LEVEL_COLORS = {
+    "INFO":    "\033[1;34m",   # bold blue
+    "WARNING": "\033[1;33m",   # bold yellow
+    "ERROR":   "\033[1;31m",   # bold red
+    "DEBUG":   "\033[0;90m",   # dark grey
+    "SUCCESS": "\033[1;92m",   # bold bright green
+}
+_RESET = "\033[0m"
+
+
 def _log(level: str, msg: str, *, err: bool = False) -> None:
-    line = f"[{_ts()}] [{level}] {msg}"
-    print(line, file=sys.stderr if err else sys.stdout, flush=True)
+    fd = sys.stderr if err else sys.stdout
+    if fd.isatty():
+        color = _LEVEL_COLORS.get(level, "")
+        tag = f"{color}[{level}]{_RESET}"
+    else:
+        tag = f"[{level}]"
+    print(f"[{_ts()}] {tag} {msg}", file=fd, flush=True)
 
 
 def _hi(text: str) -> str:
