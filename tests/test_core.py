@@ -130,5 +130,73 @@ class DumpFormattingTests(unittest.TestCase):
         self.assertEqual(split_dump_row("admin", 2), ["admin", ""])
 
 
+class JsonBodyTests(unittest.TestCase):
+    def _make_json_req(self, body_dict):
+        import json as _json, tempfile
+        body = _json.dumps(body_dict).encode()
+        raw = (
+            b"POST /api/search HTTP/1.1\r\n"
+            b"Host: target.test\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+            b"\r\n" + body
+        )
+        tmp = tempfile.NamedTemporaryFile("wb", delete=False, suffix=".txt")
+        tmp.write(raw)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def test_json_current_value_top_level(self):
+        path = self._make_json_req({"query": "test"})
+        req = parse_raw_request(path)
+        self.assertEqual(current_value(req, "query", "json"), "test")
+
+    def test_json_current_value_nested(self):
+        path = self._make_json_req({"user": {"name": "alice"}})
+        req = parse_raw_request(path)
+        self.assertEqual(current_value(req, "user.name", "json"), "alice")
+
+    def test_json_current_value_array(self):
+        path = self._make_json_req({"items": [{"id": "abc"}]})
+        req = parse_raw_request(path)
+        self.assertEqual(current_value(req, "items[0].id", "json"), "abc")
+
+    def test_json_inject_top_level(self):
+        path = self._make_json_req({"query": "test"})
+        req = parse_raw_request(path)
+        updated = inject(req, "query", "x' AND 1=1--", "json")
+        import json as _json
+        body = _json.loads(updated.body.decode())
+        self.assertEqual(body["query"], "x' AND 1=1--")
+
+    def test_json_inject_preserves_sibling_keys(self):
+        path = self._make_json_req({"query": "test", "limit": 10})
+        req = parse_raw_request(path)
+        updated = inject(req, "query", "x", "json")
+        import json as _json
+        self.assertEqual(_json.loads(updated.body.decode())["limit"], 10)
+
+    def test_json_inject_updates_content_length(self):
+        path = self._make_json_req({"q": "x"})
+        req = parse_raw_request(path)
+        updated = inject(req, "q", "much longer payload value here", "json")
+        self.assertEqual(int(updated.header_value("Content-Length")), len(updated.body))
+
+    def test_json_injection_points_level1(self):
+        path = self._make_json_req({"query": "test", "filter": "all"})
+        req = parse_raw_request(path)
+        points = injection_points(req, level=1)
+        names = {(p.place, p.name) for p in points}
+        self.assertIn(("json", "query"), names)
+        self.assertIn(("json", "filter"), names)
+
+    def test_json_place_not_found_raises(self):
+        path = self._make_json_req({"query": "test"})
+        req = parse_raw_request(path)
+        with self.assertRaises(ValueError):
+            inject(req, "nonexistent", "x", "json")
+
+
 if __name__ == "__main__":
     unittest.main()

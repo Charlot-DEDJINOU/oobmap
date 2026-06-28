@@ -1,4 +1,5 @@
 import http.client
+import json
 import ssl
 from dataclasses import dataclass, replace
 from urllib.parse import parse_qsl, quote_plus, unquote_plus, urlencode, urlsplit, urlunsplit
@@ -73,6 +74,47 @@ def join_cookie(cookies: list[tuple[str, str]]) -> str:
     return "; ".join(f"{key}={value}" for key, value in cookies)
 
 
+def _json_path_parts(path: str) -> list[str | int]:
+    import re
+    parts: list[str | int] = []
+    for segment in re.split(r'\.(?![^\[]*\])', path):
+        if not segment:
+            continue
+        base = re.sub(r'\[\d+\].*', '', segment)
+        parts.append(base)
+        for idx in re.findall(r'\[(\d+)\]', segment):
+            parts.append(int(idx))
+    return parts
+
+
+def _json_get(obj: object, path: str) -> object:
+    for key in _json_path_parts(path):
+        obj = obj[key]  # type: ignore[index]
+    return obj
+
+
+def _json_set(obj: object, path: str, value: str) -> object:
+    import copy
+    root = copy.deepcopy(obj)
+    parts = _json_path_parts(path)
+    node: object = root
+    for key in parts[:-1]:
+        node = node[key]  # type: ignore[index]
+    node[parts[-1]] = value  # type: ignore[index]
+    return root
+
+
+def _json_leaf_paths(obj: object, prefix: str = ""):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield from _json_leaf_paths(v, f"{prefix}.{k}" if prefix else k)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            yield from _json_leaf_paths(v, f"{prefix}[{i}]")
+    elif isinstance(obj, str):
+        yield prefix, obj
+
+
 def with_header(req: RawRequest, header_name: str, value: str) -> RawRequest:
     headers = []
     done = False
@@ -133,6 +175,21 @@ def inject(req: RawRequest, name: str, value: str, place: str = "auto") -> RawRe
         if place == "header":
             raise ValueError(f"header not found: {name}")
 
+    if place in ("auto", "json"):
+        ctype = req.header_value("Content-Type") or ""
+        if req.body and "application/json" in ctype.lower():
+            try:
+                obj = json.loads(req.body.decode("utf-8"))
+                _json_get(obj, name)
+                new_obj = _json_set(obj, name, value)
+                body = json.dumps(new_obj, separators=(",", ":")).encode("utf-8")
+                updated = with_header(req, "Content-Length", str(len(body)))
+                return replace(updated, body=body)
+            except (json.JSONDecodeError, KeyError, IndexError, ValueError):
+                pass
+        if place == "json":
+            raise ValueError(f"json injection point not found: {name}")
+
     raise ValueError(f"injection point not found: {name}")
 
 
@@ -173,6 +230,17 @@ def current_value(req: RawRequest, name: str, place: str = "auto") -> str:
         if place == "header":
             raise ValueError(f"header not found: {name}")
 
+    if place in ("auto", "json"):
+        ctype = req.header_value("Content-Type") or ""
+        if req.body and "application/json" in ctype.lower():
+            try:
+                obj = json.loads(req.body.decode("utf-8"))
+                return str(_json_get(obj, name))
+            except (json.JSONDecodeError, KeyError, IndexError, ValueError):
+                pass
+        if place == "json":
+            raise ValueError(f"json injection point not found: {name}")
+
     raise ValueError(f"injection point not found: {name}")
 
 
@@ -188,6 +256,15 @@ def injection_points(req: RawRequest, level: int = 1) -> list[InjectionPoint]:
         decoded = req.body.decode("utf-8", errors="replace")
         for key, value in parse_qsl(decoded, keep_blank_values=True):
             points.append(InjectionPoint(key, "body", value))
+
+    ctype = req.header_value("Content-Type") or ""
+    if req.body and "application/json" in ctype.lower():
+        try:
+            obj = json.loads(req.body.decode("utf-8"))
+            for path, value in _json_leaf_paths(obj):
+                points.append(InjectionPoint(path, "json", value))
+        except json.JSONDecodeError:
+            pass
 
     if level >= 2:
         cookie = req.header_value("Cookie")

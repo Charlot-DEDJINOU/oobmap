@@ -417,7 +417,7 @@ def add_common(parser):
     parser.add_argument("-p", "--param", help="parameter/cookie/header name to inject")
     parser.add_argument(
         "--place",
-        choices=["auto", "cookie", "query", "body", "header", "marker"],
+        choices=["auto", "cookie", "query", "body", "header", "marker", "json"],
         default="auto",
         help="where to inject, or marker to replace the first '*'",
     )
