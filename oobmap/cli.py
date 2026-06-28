@@ -683,13 +683,19 @@ def run(args) -> int:
     if getattr(args, "enum_all", False):
         args.dbs = args.banner = args.current_user = args.current_db = True
 
-    for flag, val in [
-        ("-r/--request", getattr(args, "request", None)),
-        ("--domain",     getattr(args, "domain",  None)),
-        ("--log",        getattr(args, "log",     None)),
-    ]:
-        if not val:
-            raise SystemExit(f"the following argument is required: {flag}")
+    if not getattr(args, "request", None):
+        raise SystemExit("the following argument is required: -r/--request")
+
+    if not getattr(args, "domain", None) or not getattr(args, "log", None):
+        missing = "--domain" if not getattr(args, "domain", None) else "--log"
+        _log("WARNING", f"{missing} is required", err=True)
+        _log("INFO",
+             "launch interactsh client first:\n\n"
+             "    interactsh-client -json-output interactsh.jsonl\n\n"
+             "  then run oobmap with:\n"
+             "    --domain <your-cid>.oast.site --log interactsh.jsonl",
+             err=True)
+        raise SystemExit(1)
 
     if not args.dbms:
         args.dbms = _detect_dbms(args)
@@ -739,9 +745,20 @@ def _banner() -> str:
     return "\n" + "\n".join(_ART) + f"\n\n{_SUBTITLE}\n"
 
 
+def _starting_line() -> str:
+    now = datetime.datetime.now()
+    ts   = now.strftime("%H:%M:%S")
+    date = now.strftime("%Y-%m-%d")
+    if sys.stdout.isatty():
+        star = "\033[1;36m[*]\033[0m"
+    else:
+        star = "[*]"
+    return f"{star} starting @ {ts} /{date}/\n"
+
+
 class _Formatter(argparse.RawDescriptionHelpFormatter):
     def _format_usage(self, usage, actions, groups, prefix):
-        return _banner() + f"Usage: {self._prog} [options]\n\n"
+        return f"Usage: {self._prog} [options]\n\n"
 
 
 def make_parser():
@@ -872,11 +889,13 @@ def profiles(args) -> int:
 
 
 def main(argv=None):
+    print(_banner(), end="", flush=True)
     parser = make_parser()
     args = parser.parse_args(argv)
     if args.command is None and not getattr(args, "request", None):
         parser.print_help()
         return 0
+    print(_starting_line(), flush=True)
     try:
         return args.func(args)
     except KeyboardInterrupt:
