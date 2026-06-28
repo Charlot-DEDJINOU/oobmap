@@ -346,14 +346,16 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
 
 
 def extract(args) -> int:
-    require_param(args)
+    if not args.param:
+        raise SystemExit("--expr requires -p/--param")
     expression = build_expression(args)
     extract_value(args, expression, args.alphabet, args.max_len)
     return 0
 
 
 def dump(args) -> int:
-    require_param(args)
+    if not args.param:
+        raise SystemExit("--dump requires -p/--param")
     flush_session_once(args)
     dbms = DBMS[args.dbms]
     columns = [column.strip() for column in args.column.split(",") if column.strip()] if args.column else []
@@ -444,7 +446,8 @@ def format_csv(columns: list[str], rows: list[list[str]]) -> str:
 
 
 def enum(args) -> int:
-    require_param(args)
+    if not args.param:
+        raise SystemExit("enum requires -p/--param")
     flush_session_once(args)
     dbms = DBMS[args.dbms]
     selected = []
