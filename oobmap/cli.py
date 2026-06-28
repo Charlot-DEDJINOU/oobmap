@@ -260,8 +260,19 @@ def dump(args) -> int:
         print_dump_row(columns, row)
 
     if rows:
-        print("\n[+] dump result")
-        print_dump_table(columns, rows)
+        formatter = {"table": format_table, "json": format_json, "csv": format_csv}
+        output = formatter[args.output_format](columns, rows)
+
+        if args.output_file:
+            from pathlib import Path as _Path
+            _Path(args.output_file).write_text(output, encoding="utf-8")
+            print(f"[+] saved to {args.output_file}", file=sys.stderr)
+
+        if args.output_format == "table":
+            print("\n[+] dump result")
+            print(output)
+        elif not args.output_file:
+            print(output)
     return 0
 
 
@@ -291,6 +302,30 @@ def print_dump_table(columns: list[str], rows: list[list[str]]):
     print(sep)
     for row in rows:
         print(" | ".join(value.ljust(width) for value, width in zip(row, widths)))
+
+
+def format_table(columns: list[str], rows: list[list[str]]) -> str:
+    widths = [len(c) for c in columns]
+    for row in rows:
+        widths = [max(w, len(v)) for w, v in zip(widths, row)]
+    header = " | ".join(c.ljust(w) for c, w in zip(columns, widths))
+    sep = "-+-".join("-" * w for w in widths)
+    lines = [header, sep] + [" | ".join(v.ljust(w) for v, w in zip(row, widths)) for row in rows]
+    return "\n".join(lines)
+
+
+def format_json(columns: list[str], rows: list[list[str]]) -> str:
+    import json as _json
+    return _json.dumps([dict(zip(columns, row)) for row in rows], indent=2)
+
+
+def format_csv(columns: list[str], rows: list[list[str]]) -> str:
+    import csv, io
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(columns)
+    writer.writerows(rows)
+    return out.getvalue()
 
 
 def enum(args) -> int:
@@ -517,6 +552,18 @@ def make_parser():
     p_dump.add_argument("--enum-limit", type=int, default=50, help="maximum tables/columns to enumerate during validation")
     p_dump.add_argument("--validate", dest="validate", action="store_true", default=True, help="confirm table/columns before dumping (default)")
     p_dump.add_argument("--no-validate", dest="validate", action="store_false", help="skip catalog validation; requires -C")
+    p_dump.add_argument(
+        "--output-format",
+        choices=["table", "json", "csv"],
+        default="table",
+        dest="output_format",
+        help="output format for dump results (default: table)",
+    )
+    p_dump.add_argument(
+        "--output-file",
+        metavar="PATH",
+        help="write dump output to this file (progress stays on stderr)",
+    )
     p_dump.set_defaults(func=dump)
 
     p_enum = sub.add_parser("enum", help="extract common DBMS metadata over OOB")
