@@ -578,83 +578,35 @@ def flush_session_once(args):
     args.flush_session = False
 
 
-def require_param(args):
-    if not args.param:
-        raise SystemExit("this command requires -p/--param. Use `oobmap check` without -p to discover injectable OOB points.")
+_ENUM_KEYS = ("dbs", "banner", "current_user", "current_db", "tables", "columns")
 
 
-def add_common(parser):
-    tgt = parser.add_argument_group("target")
-    tgt.add_argument("-r", "--request", required=True, help="raw HTTP request file")
-    tgt.add_argument("-p", "--param", help="parameter/cookie/header name to inject")
-    tgt.add_argument(
-        "--place",
-        choices=["auto", "cookie", "query", "body", "header", "marker", "json"],
-        default="auto",
-        help="injection place (default: auto); 'json' targets a dotted JSONPath e.g. user.name",
-    )
-    tgt.add_argument(
-        "--dbms",
-        choices=sorted(PROFILES),
-        required=True,
-        help="OOB payload profile — run 'oobmap profiles' for descriptions",
-    )
-    tgt.add_argument("-D", "--database", help="database/schema/catalog for metadata and dump queries")
+def run(args) -> int:
+    if getattr(args, "enum_all", False):
+        args.dbs = args.banner = args.current_user = args.current_db = True
 
-    oob = parser.add_argument_group("OOB callback")
-    oob.add_argument("--domain", required=True, help="interactsh collaborator domain")
-    oob.add_argument(
-        "--log",
-        action="append",
-        required=True,
-        metavar="PATH",
-        help="interactsh JSONL log file (repeat for multiple sources: --log a.jsonl --log b.jsonl)",
-    )
-    oob.add_argument("--timeout", type=float, default=8.0, help="seconds to wait for a callback per probe/position (default: 8)")
+    for flag, val in [
+        ("-r/--request", getattr(args, "request", None)),
+        ("--dbms",       getattr(args, "dbms",    None)),
+        ("--domain",     getattr(args, "domain",  None)),
+        ("--log",        getattr(args, "log",     None)),
+    ]:
+        if not val:
+            raise SystemExit(f"the following argument is required: {flag}")
 
-    net = parser.add_argument_group("network")
-    net.add_argument("--force-ssl", action="store_true", help="send request over HTTPS")
-    net.add_argument("--http-timeout", type=float, default=10.0, help="HTTP response timeout in seconds (default: 10)")
-    net.add_argument("--proxy", metavar="URL", help="proxy URL — http://host:port (SOCKS5 requires PySocks)")
-    net.add_argument("--no-verify-ssl", action="store_true", help="skip TLS certificate verification")
-    net.add_argument("--base", help="original parameter value before injection (default: current value from request file)")
+    is_enum = any(getattr(args, k, False) for k in _ENUM_KEYS)
+    if args.alphabet is None:
+        args.alphabet = ENUM_ALPHABET if is_enum else DEFAULT_ALPHABET
+    if args.max_len is None:
+        args.max_len = 120 if is_enum else 40
 
-    ext = parser.add_argument_group("extraction")
-    ext.add_argument(
-        "--strategy",
-        choices=["batch", "binary"],
-        default="batch",
-        help="batch: one request per char per position (default); binary: bisection, ~10x fewer requests",
-    )
-    ext.add_argument(
-        "--threads",
-        type=int,
-        default=1,
-        metavar="N",
-        help="extract N positions in parallel (default: 1; recommended range: 2-4)",
-    )
-
-    waf = parser.add_argument_group("WAF bypass")
-    waf.add_argument(
-        "--tamper",
-        default="",
-        metavar="NAMES",
-        help="comma-separated tamper chain — run 'oobmap tampers' for the list",
-    )
-
-    sess = parser.add_argument_group("session")
-    sess.add_argument("--output-dir", help="session/output directory (default: ~/.local/share/oobmap/output)")
-    sess.add_argument("--flush-session", action="store_true", help="delete the current target session before running")
-    sess.add_argument("--fresh-queries", action="store_true", help="ignore cached extraction results without deleting the session")
-    sess.add_argument("--run-id", help="fix run ID for reproducible token debugging")
-
-    misc = parser.add_argument_group("misc")
-    misc.add_argument("--level", type=int, choices=range(1, 6), default=1,
-                      help="auto-scan depth (no -p): 1=query+body, 2=+cookies, 3=+common headers, 5=all headers")
-    misc.add_argument("--risk", type=int, choices=(1, 2, 3), default=1,
-                      help="sqlmap-compatible flag (accepted but profile-driven; no effect currently)")
-    misc.add_argument("--batch", action="store_true", help="non-interactive mode (sqlmap compatibility)")
-    misc.add_argument("-v", "--verbose", action="store_true", help="print HTTP status and sent payload for each request")
+    if args.expr:
+        return extract(args)
+    if args.dump:
+        return dump(args)
+    if is_enum:
+        return enum(args)
+    return check(args)
 
 
 _BANNER = f"""\
@@ -674,74 +626,109 @@ def make_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"oobmap {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.set_defaults(func=run)
 
-    p_check = sub.add_parser("check", help="confirm conditional OOB behavior",
-                              formatter_class=argparse.RawDescriptionHelpFormatter)
-    add_common(p_check)
-    chk = p_check.add_argument_group("check")
-    chk.add_argument("--true-condition", default="1=1", help="SQL expression that evaluates to true (default: 1=1)")
-    chk.add_argument("--false-condition", default="1=2", help="SQL expression that evaluates to false (default: 1=2)")
-    chk.add_argument("--first", action="store_true", help="stop after the first confirmed OOB point")
-    p_check.set_defaults(func=check)
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("profiles", help="list payload profiles").set_defaults(func=profiles)
+    sub.add_parser("tampers",  help="list available WAF tamper scripts").set_defaults(func=list_tampers)
 
-    p_extract = sub.add_parser("extract", help="extract a scalar SQL expression",
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    add_common(p_extract)
-    ext = p_extract.add_argument_group("extract")
-    ext.add_argument("--expr", required=True, help="scalar SQL expression, e.g. SELECT password FROM users WHERE username='administrator'")
-    ext.add_argument("--alphabet", default=DEFAULT_ALPHABET, help=f"characters to test per position (default: a-z0-9, {len(DEFAULT_ALPHABET)} chars)")
-    ext.add_argument("--max-len", type=int, default=40, help="maximum length of the extracted value (default: 40)")
-    p_extract.set_defaults(func=extract)
-
-    p_dump = sub.add_parser("dump", help="convenience wrapper around extract",
-                             formatter_class=argparse.RawDescriptionHelpFormatter)
-    add_common(p_dump)
-    dmp = p_dump.add_argument_group("dump")
-    dmp.add_argument("-T", "--table", required=True, help="target table name")
-    dmp.add_argument("-C", "--column", help="comma-separated columns; if omitted, oobmap enumerates columns first")
-    dmp.add_argument("--where", help="SQL WHERE clause to filter rows, e.g. \"username='admin'\"")
-    dmp.add_argument("--alphabet", default=DEFAULT_ALPHABET, help=f"characters to test per position (default: a-z0-9, {len(DEFAULT_ALPHABET)} chars)")
-    dmp.add_argument("--max-len", type=int, default=40, help="maximum value length per cell (default: 40)")
-    dmp.add_argument("--limit", type=int, default=20, help="maximum rows to dump")
-    dmp.add_argument("--enum-limit", type=int, default=50, help="maximum tables/columns to enumerate during validation")
-    dmp.add_argument("--validate", dest="validate", action="store_true", default=True, help="confirm table/columns before dumping (default)")
-    dmp.add_argument("--no-validate", dest="validate", action="store_false", help="skip catalog validation; requires -C")
-    dmp.add_argument(
-        "--output-format",
-        choices=["table", "json", "csv"],
-        default="table",
-        dest="output_format",
-        help="output format for dump results (default: table)",
+    tgt = parser.add_argument_group("Target")
+    tgt.add_argument("-r", "--request", metavar="FILE", help="raw HTTP request file")
+    tgt.add_argument("-p", "--param", help="parameter/cookie/header name to inject")
+    tgt.add_argument(
+        "--place",
+        choices=["auto", "cookie", "query", "body", "header", "marker", "json"],
+        default="auto",
+        help="injection place (default: auto); json targets a dotted JSONPath e.g. user.name",
     )
-    dmp.add_argument(
-        "--output-file",
-        metavar="PATH",
-        help="write dump output to this file (progress stays on stderr)",
-    )
-    p_dump.set_defaults(func=dump)
+    tgt.add_argument("--dbms", choices=sorted(PROFILES),
+                     help="OOB payload profile — run 'oobmap profiles' for descriptions")
+    tgt.add_argument("-D", "--database", help="database/schema/catalog for metadata and dump queries")
 
-    p_enum = sub.add_parser("enum", help="extract common DBMS metadata over OOB",
-                             formatter_class=argparse.RawDescriptionHelpFormatter)
-    add_common(p_enum)
-    enm = p_enum.add_argument_group("enum")
-    enm.add_argument("--dbs", action="store_true", help="enumerate accessible databases/schemas")
-    enm.add_argument("--banner", action="store_true", help="extract DBMS version banner")
-    enm.add_argument("--current-user", action="store_true", help="extract the current database user")
-    enm.add_argument("--current-db", action="store_true", help="extract the current database/schema name")
-    enm.add_argument("--tables", action="store_true", help="enumerate table names")
-    enm.add_argument("--columns", action="store_true", help="enumerate column names for -T/--table")
-    enm.add_argument("-T", "--table", help="table name for --columns")
-    enm.add_argument("--limit", type=int, default=20, help="maximum items to enumerate for --dbs/--tables/--columns (default: 20)")
-    enm.add_argument("--alphabet", default=ENUM_ALPHABET, help="characters to test per position (default: extended set including spaces and symbols)")
-    enm.add_argument("--max-len", type=int, default=120, help="maximum value length per metadata item (default: 120)")
-    p_enum.set_defaults(func=enum)
+    oob = parser.add_argument_group("OOB callback")
+    oob.add_argument("--domain", help="interactsh collaborator domain")
+    oob.add_argument("--log", action="append", metavar="PATH",
+                     help="interactsh JSONL log file (repeat: --log a.jsonl --log b.jsonl)")
+    oob.add_argument("--timeout", type=float, default=8.0,
+                     help="seconds to wait for a callback per probe/position (default: 8)")
 
-    p_profiles = sub.add_parser("profiles", help="list payload profiles")
-    p_profiles.set_defaults(func=profiles)
+    enm = parser.add_argument_group("Enumeration")
+    enm.add_argument("-a", "--all", action="store_true", dest="enum_all",
+                     help="retrieve everything: banner, current-user, current-db, dbs")
+    enm.add_argument("-b", "--banner", action="store_true", help="retrieve DBMS version banner")
+    enm.add_argument("--current-user", action="store_true", help="retrieve current database user")
+    enm.add_argument("--current-db",   action="store_true", help="retrieve current database/schema name")
+    enm.add_argument("--dbs",     action="store_true", help="enumerate accessible databases/schemas")
+    enm.add_argument("--tables",  action="store_true", help="enumerate table names")
+    enm.add_argument("--columns", action="store_true", help="enumerate column names (requires -T)")
+    enm.add_argument("--dump",    action="store_true", help="dump table entries (use with -T/-C/--where)")
+    enm.add_argument("--expr", help="raw scalar SQL expression to extract via OOB")
+    enm.add_argument("-T", "--table",  help="target table")
+    enm.add_argument("-C", "--column", metavar="COL", help="comma-separated column(s) to dump")
+    enm.add_argument("--where", help="SQL WHERE clause, e.g. \"username='admin'\"")
+    enm.add_argument("--limit",      type=int, default=20, help="max rows/items to fetch (default: 20)")
+    enm.add_argument("--enum-limit", type=int, default=50,
+                     help="max tables/columns to enumerate during dump validation (default: 50)")
+    enm.add_argument("--validate",    dest="validate", action="store_true",  default=True,
+                     help="confirm table/columns before dumping (default)")
+    enm.add_argument("--no-validate", dest="validate", action="store_false",
+                     help="skip catalog validation; requires -C")
 
-    p_tampers = sub.add_parser("tampers", help="list available WAF tamper scripts")
-    p_tampers.set_defaults(func=list_tampers)
+    det = parser.add_argument_group("Detection")
+    det.add_argument("--level", type=int, choices=range(1, 6), default=1,
+                     help="auto-scan depth (no -p): 1=query+body, 2=+cookies, 3=+headers, 5=all (default: 1)")
+    det.add_argument("--risk", type=int, choices=(1, 2, 3), default=1,
+                     help="risk level 1-3 (sqlmap compat, no current effect)")
+    det.add_argument("--true-condition",  default="1=1",
+                     help="true SQL condition for check probes (default: 1=1)")
+    det.add_argument("--false-condition", default="1=2",
+                     help="false SQL condition for check probes (default: 1=2)")
+    det.add_argument("--first", action="store_true",
+                     help="stop after first confirmed OOB point (check mode)")
+
+    ext = parser.add_argument_group("Extraction")
+    ext.add_argument("--strategy", choices=["batch", "binary"], default="batch",
+                     help="batch: one request per char (default); binary: ~10x fewer requests")
+    ext.add_argument("--threads", type=int, default=1, metavar="N",
+                     help="extract N positions in parallel (default: 1; recommended range: 2-4)")
+    ext.add_argument("--alphabet", default=None,
+                     help=f"chars to test per position (default: a-z0-9 for extract/dump, extended for enum)")
+    ext.add_argument("--max-len", type=int, default=None,
+                     help="max value length (default: 40 for extract/dump, 120 for enum)")
+
+    waf = parser.add_argument_group("WAF bypass")
+    waf.add_argument("--tamper", default="", metavar="NAMES",
+                     help="comma-separated tamper chain — run 'oobmap tampers' for the list")
+
+    net = parser.add_argument_group("Network")
+    net.add_argument("--force-ssl",    action="store_true", help="send request over HTTPS")
+    net.add_argument("--http-timeout", type=float, default=10.0,
+                     help="HTTP response timeout in seconds (default: 10)")
+    net.add_argument("--proxy", metavar="URL",
+                     help="proxy URL — http://host:port (SOCKS5 requires PySocks)")
+    net.add_argument("--no-verify-ssl", action="store_true", help="skip TLS certificate verification")
+    net.add_argument("--base", help="original parameter value before injection")
+
+    out = parser.add_argument_group("Output")
+    out.add_argument("--output-format", choices=["table", "json", "csv"], default="table",
+                     dest="output_format", help="dump output format (default: table)")
+    out.add_argument("--output-file", metavar="PATH",
+                     help="write dump output to file (progress stays on stderr)")
+
+    sess = parser.add_argument_group("Session")
+    sess.add_argument("--output-dir",
+                      help="session/output directory (default: ~/.local/share/oobmap/output)")
+    sess.add_argument("--flush-session",  action="store_true",
+                      help="flush session files for current target")
+    sess.add_argument("--fresh-queries",  action="store_true",
+                      help="ignore cached results without deleting the session")
+    sess.add_argument("--run-id", help="fix run ID for reproducible token debugging")
+
+    misc = parser.add_argument_group("Misc")
+    misc.add_argument("--batch",    action="store_true", help="non-interactive mode (sqlmap compat)")
+    misc.add_argument("-v", "--verbose", action="store_true",
+                      help="print HTTP status and payload for each request")
+
     return parser
 
 
@@ -762,6 +749,9 @@ def profiles(args) -> int:
 def main(argv=None):
     parser = make_parser()
     args = parser.parse_args(argv)
+    if args.command is None and not getattr(args, "request", None):
+        parser.print_help()
+        return 0
     try:
         return args.func(args)
     except KeyboardInterrupt:
