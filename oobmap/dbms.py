@@ -193,3 +193,13 @@ METADATA = {
 
 
 DBMS = {name: DbmsProfile(name) for name in METADATA}
+
+METADATA["postgres-dblink"] = METADATA["postgres-program"]
+METADATA["mssql-cmdshell"] = METADATA["mssql"]
+METADATA["mysql-stacked"] = METADATA["mysql"]
+METADATA["sqlite-http"] = METADATA["sqlite-lab"]
+
+DBMS["postgres-dblink"] = DbmsProfile("postgres-program")
+DBMS["mssql-cmdshell"] = DbmsProfile("mssql")
+DBMS["mysql-stacked"] = DbmsProfile("mysql")
+DBMS["sqlite-http"] = DbmsProfile("sqlite-lab")
