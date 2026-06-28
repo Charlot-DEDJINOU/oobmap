@@ -7,7 +7,6 @@ import string
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading as _threading
 from pathlib import Path
 
 from . import __version__
