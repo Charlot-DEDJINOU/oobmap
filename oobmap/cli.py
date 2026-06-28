@@ -39,11 +39,13 @@ _RESET = "\033[0m"
 def _log(level: str, msg: str, *, err: bool = False) -> None:
     fd = sys.stderr if err else sys.stdout
     if fd.isatty():
+        ts  = f"\033[0;90m[{_ts()}]\033[0m"   # dark grey timestamp
         color = _LEVEL_COLORS.get(level, "")
         tag = f"{color}[{level}]{_RESET}"
     else:
+        ts  = f"[{_ts()}]"
         tag = f"[{level}]"
-    print(f"[{_ts()}] {tag} {msg}", file=fd, flush=True)
+    print(f"{ts} {tag} {msg}", file=fd, flush=True)
 
 
 def _hi(text: str) -> str:
