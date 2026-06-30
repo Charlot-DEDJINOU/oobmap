@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from oobmap.oob import InteractshLog
-from oobmap.cli import split_dump_row
+from oobmap.cli import expand_payloads, split_dump_row, strip_payload_terminator
 from oobmap.requester import current_value, inject, injection_points, parse_raw_request
 from oobmap.session import SessionStore
 
@@ -251,6 +251,36 @@ class BinaryStrategyTests(unittest.TestCase):
         for name, profile in PROFILES.items():
             cond = profile.condition_gte("SELECT 1", 1, "x")
             self.assertIn(">=", cond, f"profile {name} missing >= in condition_gte")
+
+    def test_mssql_has_multiple_oob_variants(self):
+        payloads = PROFILES["mssql"].payloads("trk", "1=1", "abc.oast.test")
+        joined = "\n".join(payloads)
+        self.assertGreaterEqual(len(payloads), 6)
+        self.assertIn("xp_dirtree", joined)
+        self.assertIn("xp_fileexist", joined)
+        self.assertIn("xp_subdirs", joined)
+
+    def test_mssql_default_variants_do_not_assume_business_columns(self):
+        payloads = PROFILES["mssql"].payloads("trk", "1=1", "abc.oast.test")
+        self.assertNotIn("is_admin", "\n".join(payloads))
+
+    def test_strip_payload_terminator(self):
+        self.assertEqual(strip_payload_terminator("abc-- -"), "abc")
+        self.assertEqual(strip_payload_terminator("abc/*"), "abc")
+
+    def test_custom_payload_suffix_is_explicit(self):
+        class Args:
+            payload_suffix = ["; SELECT 1 WHERE 'x'='x"]
+
+        expanded = expand_payloads(Args(), ["abc-- -"])
+        self.assertIn("abc; SELECT 1 WHERE 'x'='x", expanded)
+
+    def test_direct_payloads_default_to_list(self):
+        payloads = PROFILES["sqlite-lab"].direct_payloads(
+            "guest", "SELECT password FROM users", "run-d", "oast.test"
+        )
+        self.assertIsInstance(payloads, list)
+        self.assertTrue(payloads)
 
 
 import inspect
