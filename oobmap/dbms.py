@@ -39,7 +39,7 @@ class DbmsProfile:
                 f"FROM all_tables{owner_filter}"
                 f") WHERE rn={index + 1}"
             )
-        if self.name == "sqlite-lab":
+        if self.name == "sqlite-http":
             return (
                 "SELECT name FROM sqlite_master "
                 "WHERE type='table' AND name NOT LIKE 'sqlite_%' "
@@ -80,7 +80,7 @@ class DbmsProfile:
                 f"FROM all_tab_columns WHERE table_name={upper}{owner_filter}"
                 f") WHERE rn={index + 1}"
             )
-        if self.name in ("sqlite-lab", "sqlite-http"):
+        if self.name == "sqlite-http":
             # PRAGMA table_info() cannot be a subquery, but pragma_table_info()
             # is a table-valued function (SQLite >= 3.16) that can.
             return (
@@ -111,7 +111,7 @@ class DbmsProfile:
                 f"FROM {source}{where_clause}"
                 f") AS d WHERE rn={index + 1}"
             )
-        if self.name in {"mysql", "postgres-program", "sqlite-lab"}:
+        if self.name in {"mysql", "postgres-program", "sqlite-http"}:
             return (
                 f"SELECT {projection} FROM {source}{where_clause} "
                 f"ORDER BY {columns[0]} LIMIT 1 OFFSET {index}"
@@ -175,7 +175,7 @@ class DbmsProfile:
             return f"CAST({expression} AS CHAR)"
         if self.name == "oracle-http":
             return f"TO_CHAR({expression})"
-        if self.name in {"postgres-program", "sqlite-lab"}:
+        if self.name in {"postgres-program", "sqlite-http"}:
             return f"CAST({expression} AS TEXT)"
         return expression
 
@@ -194,7 +194,7 @@ def sql_string(value: str) -> str:
 
 
 METADATA = {
-    "sqlite-lab": {
+    "sqlite-http": {
         "banner": "SELECT sqlite_version()",
         "current_user": "SELECT 'sqlite'",
         "current_db": "SELECT 'main'",
@@ -227,9 +227,7 @@ DBMS = {name: DbmsProfile(name) for name in METADATA}
 METADATA["postgres-dblink"] = METADATA["postgres-program"]
 METADATA["mssql-cmdshell"] = METADATA["mssql"]
 METADATA["mysql-stacked"] = METADATA["mysql"]
-METADATA["sqlite-http"] = METADATA["sqlite-lab"]
 
 DBMS["postgres-dblink"] = DbmsProfile("postgres-program")
 DBMS["mssql-cmdshell"] = DbmsProfile("mssql")
 DBMS["mysql-stacked"] = DbmsProfile("mysql")
-DBMS["sqlite-http"] = DbmsProfile("sqlite-lab")

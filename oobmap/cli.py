@@ -665,7 +665,7 @@ def flush_session_once(args):
 _ENUM_KEYS = ("dbs", "banner", "current_user", "current_db", "tables", "columns")
 
 # Primary profiles tried during DBMS auto-detection (one per engine, most common first)
-_DETECT_ORDER = ["mysql", "mssql", "postgres-program", "oracle-http", "sqlite-lab"]
+_DETECT_ORDER = ["mysql", "mssql", "postgres-program", "oracle-http", "sqlite-http"]
 
 # Human-readable DBMS name for each profile (used in log output only)
 _DBMS_DISPLAY = {
@@ -676,13 +676,12 @@ _DBMS_DISPLAY = {
     "postgres-program": "PostgreSQL",
     "postgres-dblink":  "PostgreSQL",
     "oracle-http":      "Oracle",
-    "sqlite-lab":       "SQLite",
     "sqlite-http":      "SQLite",
 }
 
 # Alias map: accepts shorthand/case-insensitive names → canonical profile
 _DBMS_ALIASES = {
-    "sqlite":     "sqlite-lab",
+    "sqlite":     "sqlite-http",
     "postgres":   "postgres-program",
     "postgresql": "postgres-program",
     "oracle":     "oracle-http",

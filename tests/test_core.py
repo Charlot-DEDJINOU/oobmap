@@ -276,7 +276,7 @@ class BinaryStrategyTests(unittest.TestCase):
         self.assertIn("abc; SELECT 1 WHERE 'x'='x", expanded)
 
     def test_direct_payloads_default_to_list(self):
-        payloads = PROFILES["sqlite-lab"].direct_payloads(
+        payloads = PROFILES["sqlite-http"].direct_payloads(
             "guest", "SELECT password FROM users", "run-d", "oast.test"
         )
         self.assertIsInstance(payloads, list)

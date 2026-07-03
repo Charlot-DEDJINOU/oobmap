@@ -121,7 +121,7 @@ class DbsExpressionTests(unittest.TestCase):
 
     def test_sqlite_dbs_expression_raises(self):
         with self.assertRaises(ValueError):
-            DBMS["sqlite-lab"].dbs_expression(0)
+            DBMS["sqlite-http"].dbs_expression(0)
 
     def test_postgres_dblink_alias_matches_parent(self):
         self.assertEqual(

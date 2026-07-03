@@ -350,7 +350,7 @@ Current profiles:
 | `mysql` | MySQL `LOAD_FILE('\\\\host\\x')` | Usually depends on Windows/UNC behavior and file privileges. |
 | `oracle-http` | Oracle `UTL_HTTP.REQUEST()` | Requires network ACL/package access. |
 | `postgres-program` | PostgreSQL `COPY ... TO PROGRAM` | Requires high privileges such as superuser or `pg_execute_server_program`. |
-| `sqlite-lab` | Training profile using a custom `dns_lookup()` SQL function | For local demos only. |
+| `sqlite-http` | SQLite `http_get()` callback via sqlite-http/sqlean-http | Requires the SQLite HTTP extension to be loaded. |
 
 Profiles are explicit on purpose. OOB exploitation depends heavily on the DBMS,
 available privileges, network egress, and stacked-query support.
@@ -361,7 +361,7 @@ Metadata enumeration uses DBMS-specific catalog queries:
 - MySQL: `information_schema.tables`, `information_schema.columns`
 - PostgreSQL: `information_schema.tables`, `information_schema.columns`
 - Oracle: `all_tables`, `all_tab_columns`
-- SQLite training profile: `sqlite_master` for table names
+- SQLite HTTP profile: `sqlite_master` for table names
 
 ## How Extraction Works
 
