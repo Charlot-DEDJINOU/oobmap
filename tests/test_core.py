@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from oobmap.oob import InteractshLog
-from oobmap.cli import expand_payloads, split_dump_row, strip_payload_terminator
+from oobmap.cli import expand_payloads, split_dump_row, strip_payload_terminator, make_parser, _validate_action_flags
 from oobmap.requester import current_value, inject, injection_points, parse_raw_request
 from oobmap.session import SessionStore
 
@@ -374,6 +374,35 @@ class ThreadSafeLogTests(unittest.TestCase):
         for t in threads:
             t.join()
         self.assertEqual(errors, [])
+
+
+class CheckFlagTests(unittest.TestCase):
+    class Args:
+        def __init__(self, check=False, expr=None):
+            self.check = check
+            self.expr = expr
+
+    def test_check_flag_defaults_false(self):
+        args = make_parser().parse_args([])
+        self.assertFalse(args.check)
+
+    def test_check_flag_parses_true(self):
+        args = make_parser().parse_args(["--check"])
+        self.assertTrue(args.check)
+
+    def test_check_alone_does_not_raise(self):
+        _validate_action_flags(self.Args(check=True), is_enum=False)
+
+    def test_no_check_does_not_raise(self):
+        _validate_action_flags(self.Args(check=False), is_enum=False)
+
+    def test_check_with_expr_raises(self):
+        with self.assertRaises(SystemExit):
+            _validate_action_flags(self.Args(check=True, expr="SELECT 1"), is_enum=False)
+
+    def test_check_with_enum_flag_raises(self):
+        with self.assertRaises(SystemExit):
+            _validate_action_flags(self.Args(check=True), is_enum=True)
 
 
 if __name__ == "__main__":

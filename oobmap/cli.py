@@ -749,6 +749,11 @@ def _detect_dbms(args) -> str | None:
     return None
 
 
+def _validate_action_flags(args, is_enum: bool) -> None:
+    if getattr(args, "check", False) and (args.expr or is_enum):
+        raise SystemExit("--check cannot be combined with --expr/--dump/enum flags")
+
+
 def run(args) -> int:
     if getattr(args, "enum_all", False):
         args.dbs = args.banner = args.current_user = args.current_db = True
@@ -782,6 +787,7 @@ def run(args) -> int:
         )
 
     is_enum = any(getattr(args, k, False) for k in _ENUM_KEYS) or getattr(args, "dump", False)
+    _validate_action_flags(args, is_enum)
     if args.alphabet is None:
         args.alphabet = ENUM_ALPHABET if is_enum else DEFAULT_ALPHABET
     if args.max_len is None:
@@ -905,6 +911,9 @@ def make_parser():
                      help="skip catalog validation; requires -C")
 
     det = parser.add_argument_group("Detection")
+    det.add_argument("--check", action="store_true",
+                     help="explicitly run OOB verification (default action when no "
+                          "--expr/--dump/enum flag is given)")
     det.add_argument("--level", type=int, choices=range(1, 6), default=1,
                      help="auto-scan depth (no -p): 1=query+body, 2=+cookies, 3=+headers, 5=all (default: 1)")
     det.add_argument("--risk", type=int, choices=(1, 2, 3), default=1,
