@@ -14,7 +14,7 @@ from . import __version__
 from .dbms import DBMS
 from .oob import InteractshLog, MultiInteractshLog
 from .payloads import PROFILES
-from .requester import current_value, inject, injection_points, parse_raw_request, send
+from .transport import current_value, inject, injection_points, parse_raw_request, send
 from .session import SessionStore
 from .tamper import TAMPERS, apply_tampers
 

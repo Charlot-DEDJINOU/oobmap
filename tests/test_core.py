@@ -4,7 +4,7 @@ from pathlib import Path
 
 from oobmap.oob import InteractshLog
 from oobmap.cli import expand_payloads, split_dump_row, strip_payload_terminator, make_parser, _validate_action_flags
-from oobmap.requester import current_value, inject, injection_points, parse_raw_request
+from oobmap.transport import current_value, inject, injection_points, parse_raw_request
 from oobmap.session import SessionStore
 
 
@@ -284,7 +284,7 @@ class BinaryStrategyTests(unittest.TestCase):
 
 
 import inspect
-from oobmap.requester import send
+from oobmap.transport import send
 
 
 class ProxySupportTests(unittest.TestCase):
