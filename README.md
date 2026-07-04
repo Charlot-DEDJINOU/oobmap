@@ -353,9 +353,13 @@ Current profiles:
 | Profile | Purpose | Notes |
 |---|---|---|
 | `mssql` | MSSQL stacked query via `xp_dirtree` | Requires stacked queries and access to `xp_dirtree`. |
+| `mssql-cmdshell` | MSSQL `xp_cmdshell` nslookup callback | Alternative when `xp_dirtree` is blocked; requires `xp_cmdshell` enabled. |
 | `mysql` | MySQL `LOAD_FILE('\\\\host\\x')` | Usually depends on Windows/UNC behavior and file privileges. |
+| `mysql-stacked` | MySQL `LOAD_FILE` via stacked query | For multi-statement enabled targets; requires FILE privilege. |
 | `oracle-http` | Oracle `UTL_HTTP.REQUEST()` | Requires network ACL/package access. |
+| `oracle-dns` | Oracle `UTL_INADDR.GET_HOST_ADDRESS()` | DNS-only — no `UTL_HTTP`/HTTP ACL needed; useful when HTTP egress is blocked but DNS resolution is allowed. |
 | `postgres-program` | PostgreSQL `COPY ... TO PROGRAM` | Requires high privileges such as superuser or `pg_execute_server_program`. |
+| `postgres-dblink` | PostgreSQL `dblink` extension callback | Lower privilege than `COPY TO PROGRAM`; no superuser needed in most default installs. |
 | `sqlite-http` | SQLite `http_get()` callback via sqlite-http/sqlean-http | Requires the SQLite HTTP extension to be loaded. |
 
 Profiles are explicit on purpose. OOB exploitation depends heavily on the DBMS,
