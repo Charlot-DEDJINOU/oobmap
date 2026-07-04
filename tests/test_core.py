@@ -1,10 +1,14 @@
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from oobmap.oob import InteractshLog
-from oobmap.cli import split_dump_row, make_parser, _validate_action_flags
 from oobmap.core.dispatch import expand_payloads, strip_payload_terminator
+from oobmap.core.formatting import split_dump_row
+from oobmap.cli.parser import make_parser
+from oobmap.cli.app import _validate_action_flags
 from oobmap.transport import current_value, inject, injection_points, parse_raw_request
 from oobmap.session import SessionStore
 
@@ -199,7 +203,7 @@ class JsonBodyTests(unittest.TestCase):
             inject(req, "nonexistent", "x", "json")
 
 
-from oobmap.cli import format_json, format_csv
+from oobmap.core.formatting import format_json, format_csv
 
 
 class OutputFormatTests(unittest.TestCase):
@@ -453,6 +457,21 @@ class RiskLevelTests(unittest.TestCase):
             joined = "\n".join(aggressive)
             self.assertNotIn("xp_cmdshell", joined)
             self.assertNotIn("dblink_connect", joined)
+
+
+class PackagingSmokeTest(unittest.TestCase):
+    def test_cli_help_runs_via_module_entrypoint(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "oobmap.cli", "--help"],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("--check", result.stdout)
+        self.assertIn("--risk", result.stdout)
+
+    def test_cli_entry_point_main_is_importable(self):
+        from oobmap.cli import main
+        self.assertTrue(callable(main))
 
 
 if __name__ == "__main__":
