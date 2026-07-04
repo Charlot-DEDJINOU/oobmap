@@ -1,7 +1,6 @@
 from .request import RawRequest, InjectionPoint, parse_raw_request
+from .cookies import split_cookie, join_cookie
 from .inject import (
-    split_cookie,
-    join_cookie,
     with_header,
     with_first_header,
     inject,
