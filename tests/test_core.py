@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import subprocess
 import sys
 import tempfile
@@ -85,6 +86,56 @@ class RequesterTests(unittest.TestCase):
         injected = inject(req, "X-Forwarded-For", "PAYLOAD", "header")
         xff_values = [v for n, v in injected.headers if n.lower() == "x-forwarded-for"]
         self.assertEqual(xff_values, ["PAYLOAD", "2.2.2.2"])
+
+    def test_inject_json_array_element_leaves_siblings_untouched(self):
+        req = RawRequest(
+            method="POST",
+            target="/api",
+            version="HTTP/1.1",
+            headers=[("Host", "example.com"), ("Content-Type", "application/json")],
+            body=b'{"items": [{"id": 1}, {"id": 2}]}',
+        )
+        injected = inject(req, "items[0].id", "PAYLOAD", "json")
+        body = json.loads(injected.body)
+        self.assertEqual(body["items"][0]["id"], "PAYLOAD")
+        self.assertEqual(body["items"][1]["id"], 2)
+
+    def test_empty_body_yields_no_body_or_json_injection_points(self):
+        req = RawRequest(
+            method="GET",
+            target="/path?q=x",
+            version="HTTP/1.1",
+            headers=[("Host", "example.com")],
+            body=b"",
+        )
+        points = injection_points(req, level=3)
+        places = {p.place for p in points}
+        self.assertNotIn("body", places)
+        self.assertNotIn("json", places)
+
+    def test_absolute_form_target_query_injection_keeps_prefix(self):
+        req = RawRequest(
+            method="GET",
+            target="http://host/path?q=x",
+            version="HTTP/1.1",
+            headers=[("Host", "host")],
+            body=b"",
+        )
+        injected = inject(req, "q", "PAYLOAD", "query")
+        self.assertTrue(injected.target.startswith("http://host/path?"))
+        self.assertIn("q=PAYLOAD", injected.target)
+
+    def test_header_lookup_is_case_insensitive_for_lowercase_cookie(self):
+        req = RawRequest(
+            method="GET",
+            target="/",
+            version="HTTP/1.1",
+            headers=[("Host", "example.com"), ("cookie", "session=abc")],
+            body=b"",
+        )
+        self.assertEqual(current_value(req, "session", "cookie"), "abc")
+        injected = inject(req, "session", "PAYLOAD", "cookie")
+        self.assertEqual(current_value(injected, "session", "cookie"), "PAYLOAD")
 
 
 class InteractshLogTests(unittest.TestCase):
