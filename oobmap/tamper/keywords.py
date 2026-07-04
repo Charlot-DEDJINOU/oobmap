@@ -37,18 +37,7 @@ def between_comments(payload: str) -> str:
     return payload
 
 
-def hex_encode_strings(payload: str) -> str:
-    return re.sub(r"'([^']*)'", lambda m: "0x" + m.group(1).encode().hex(), payload)
-
-
-def double_url_encode(payload: str) -> str:
-    from urllib.parse import quote
-    return quote(quote(payload, safe=""), safe="")
-
-
-def url_encode(payload: str) -> str:
-    from urllib.parse import quote
-    return quote(payload, safe="")
+from .encoding import hex_encode_strings, double_url_encode, url_encode
 
 
 def space_to_random_blank(payload: str) -> str:
