@@ -12,7 +12,7 @@ from oobmap.core.dispatch import expand_payloads, strip_payload_terminator
 from oobmap.core.formatting import split_dump_row
 from oobmap.cli.parser import make_parser
 from oobmap.cli.app import _validate_action_flags
-from oobmap.transport import current_value, inject, injection_points, parse_raw_request
+from oobmap.transport import RawRequest, current_value, inject, injection_points, parse_raw_request
 from oobmap.session import SessionStore
 
 
@@ -69,6 +69,22 @@ class RequesterTests(unittest.TestCase):
 
         level3 = injection_points(req, 3)
         self.assertIn(("header", "User-Agent"), {(p.place, p.name) for p in level3})
+
+    def test_inject_header_repeated_targets_first_occurrence_only(self):
+        req = RawRequest(
+            method="GET",
+            target="/",
+            version="HTTP/1.1",
+            headers=[
+                ("Host", "example.com"),
+                ("X-Forwarded-For", "1.1.1.1"),
+                ("X-Forwarded-For", "2.2.2.2"),
+            ],
+            body=b"",
+        )
+        injected = inject(req, "X-Forwarded-For", "PAYLOAD", "header")
+        xff_values = [v for n, v in injected.headers if n.lower() == "x-forwarded-for"]
+        self.assertEqual(xff_values, ["PAYLOAD", "2.2.2.2"])
 
 
 class InteractshLogTests(unittest.TestCase):
