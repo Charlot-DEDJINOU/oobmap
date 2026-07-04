@@ -69,10 +69,23 @@ class TamperTests(unittest.TestCase):
         non_space_result = "".join(c for c in result if c not in "\t\n\x0b\x0c\r")
         self.assertEqual(non_space_original, non_space_result)
 
-    def test_all_seven_tampers_registered(self):
+    def test_if2case_via_apply_tampers(self):
+        result = apply_tampers("IF(1=1,2,3)", ["if2case"])
+        self.assertEqual(result, "CASE WHEN (1=1) THEN (2) ELSE (3) END")
+
+    def test_ord2ascii_via_apply_tampers(self):
+        result = apply_tampers("ORD('A')", ["ord2ascii"])
+        self.assertEqual(result, "ASCII('A')")
+
+    def test_sp_password_via_apply_tampers(self):
+        result = apply_tampers("SELECT 1-- -", ["sp_password"])
+        self.assertEqual(result, "SELECT 1-- - sp_password")
+
+    def test_all_ten_tampers_registered(self):
         expected = {"inline-comments", "randomize-case", "between-comments",
                     "hex-encode-strings", "double-url-encode",
-                    "url-encode", "space2randomblank"}
+                    "url-encode", "space2randomblank",
+                    "if2case", "ord2ascii", "sp_password"}
         self.assertEqual(set(TAMPERS.keys()), expected)
 
 
@@ -110,6 +123,20 @@ class TamperWarningsTests(unittest.TestCase):
 
     def test_no_warning_for_empty_chain(self):
         self.assertEqual(tamper_warnings([], "postgres-program"), [])
+
+    def test_sp_password_warns_for_mysql(self):
+        warnings = tamper_warnings(["sp_password"], "mysql")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("sp_password", warnings[0])
+
+    def test_sp_password_no_warning_for_mssql(self):
+        self.assertEqual(tamper_warnings(["sp_password"], "mssql"), [])
+
+    def test_sp_password_no_warning_for_mssql_cmdshell(self):
+        self.assertEqual(tamper_warnings(["sp_password"], "mssql-cmdshell"), [])
+
+    def test_sp_password_no_warning_when_dbms_none(self):
+        self.assertEqual(tamper_warnings(["sp_password"], None), [])
 
 
 class If2CaseTests(unittest.TestCase):

@@ -396,6 +396,9 @@ Current tampers:
 | `double-url-encode` | Double URL-encode the full payload |
 | `url-encode` | URL-encode the full payload once |
 | `space2randomblank` | Replace spaces with a random whitespace character (tab/newline/etc.) |
+| `if2case` | Rewrite `IF(cond,then,else)` as `CASE WHEN (cond) THEN (then) ELSE (else) END` |
+| `ord2ascii` | Replace `ORD()` calls with `ASCII()` (MySQL) |
+| `sp_password` | Append `sp_password` to hide the query from MSSQL logs |
 
 Chain multiple tampers with a comma-separated list, applied in order:
 
@@ -418,6 +421,15 @@ it stays your call whether to proceed:
 ```text
 [WARNING] tamper 'hex-encode-strings' emits bare 0x<hex> literals, valid only
           in MySQL/MSSQL — likely to break query syntax for --dbms postgres-program.
+```
+
+`sp_password` only has an effect against MSSQL (its log-redaction trick is
+MSSQL-specific) — it's a harmless no-op elsewhere, so `oobmap` warns rather
+than blocking:
+
+```text
+[WARNING] tamper 'sp_password' only hides queries from MSSQL logs — has no
+          effect for --dbms mysql.
 ```
 
 ## How Extraction Works
