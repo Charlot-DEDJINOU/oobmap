@@ -1,3 +1,5 @@
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -5,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from oobmap.oob import InteractshLog
+from oobmap.core.actions import run_check, check
 from oobmap.core.dispatch import expand_payloads, strip_payload_terminator
 from oobmap.core.formatting import split_dump_row
 from oobmap.cli.parser import make_parser
@@ -472,6 +475,101 @@ class PackagingSmokeTest(unittest.TestCase):
     def test_cli_entry_point_main_is_importable(self):
         from oobmap.cli import main
         self.assertTrue(callable(main))
+
+
+class ActionableDiagnosticsTests(unittest.TestCase):
+    class Args:
+        def __init__(self, **kw):
+            self.base = kw.get("base", "guest")
+            self.true_condition = kw.get("true_condition", "1=1")
+            self.false_condition = kw.get("false_condition", "1=2")
+            self.timeout = kw.get("timeout", 0.05)
+            self.param = kw.get("param", "TrackingId")
+            self.place = kw.get("place", "cookie")
+            self.log = kw.get("log", [])
+            self.domain = kw.get("domain", "oast.test")
+            self.dbms = kw.get("dbms", "sqlite-http")
+            self.verbose = False
+            self.force_ssl = False
+            self.http_timeout = 1.0
+            self.tamper = ""
+            self.payload_suffix = None
+
+    def _write_jsonl(self, content):
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        tmp.write(content)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def _write_request(self, text):
+        tmp = tempfile.NamedTemporaryFile("w", delete=False)
+        tmp.write(text)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def test_run_check_no_signal_suggests_next_steps(self):
+        log_path = self._write_jsonl("")
+        log = InteractshLog(log_path)
+        req_path = self._write_request(
+            "GET / HTTP/1.1\nHost: example.test\nCookie: TrackingId=guest\n\n"
+        )
+        request = parse_raw_request(req_path)
+        args = self.Args(log=[log_path])
+        profile = PROFILES["sqlite-http"]
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = run_check(args, profile, request, "oast.test", log, "testrun1")
+
+        self.assertEqual(rc, 1)
+        output = buf.getvalue()
+        self.assertIn("No reliable conditional OOB behavior detected", output)
+        self.assertIn("Try a different --place/-p injection point", output)
+
+    def test_run_check_both_probes_suggests_next_steps(self):
+        log_path = self._write_jsonl(
+            '{"full-id":"testrun2-true.oast.test"}\n'
+            '{"full-id":"testrun2-false.oast.test"}\n'
+        )
+        log = InteractshLog(log_path)
+        log.offset = 0
+        req_path = self._write_request(
+            "GET / HTTP/1.1\nHost: example.test\nCookie: TrackingId=guest\n\n"
+        )
+        request = parse_raw_request(req_path)
+        args = self.Args(log=[log_path])
+        profile = PROFILES["sqlite-http"]
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = run_check(args, profile, request, "oast.test", log, "testrun2")
+
+        self.assertEqual(rc, 2)
+        output = buf.getvalue()
+        self.assertIn("Both probes triggered", output)
+        self.assertIn("Try adjusting --true-condition/--false-condition", output)
+
+    def test_check_scan_mode_no_points_suggests_higher_level(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_path = Path(tmpdir) / "req.txt"
+            req_path.write_text("GET / HTTP/1.1\nHost: example.test\n\n")
+            log_path = self._write_jsonl("")
+            args = self.Args(log=[log_path], param=None)
+            args.request = str(req_path)
+            args.output_dir = tmpdir
+            args.flush_session = False
+            args.level = 1
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check(args)
+
+            self.assertEqual(rc, 1)
+            output = buf.getvalue()
+            self.assertIn("No injection points found at this level", output)
+            self.assertIn("Try a higher --level", output)
 
 
 if __name__ == "__main__":

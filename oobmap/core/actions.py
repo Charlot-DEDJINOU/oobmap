@@ -61,8 +61,14 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
         return 0
     if true_hit and false_hit:
         _log("WARNING", "Both probes triggered — OOB capable but not conditional")
+        _log("INFO", "Try adjusting --true-condition/--false-condition, or a "
+                      "different --place/-p injection point — the current pair "
+                      "isn't producing a differential signal.")
         return 2
     _log("WARNING", "No reliable conditional OOB behavior detected")
+    _log("INFO", "Try a different --place/-p injection point, a different "
+                  "--dbms profile, a longer --timeout, or confirm outbound "
+                  "DNS/HTTP egress from the target.")
     return 1
 
 
@@ -90,6 +96,8 @@ def check(args) -> int:
     points = injection_points(request, args.level)
     if not points:
         _log("WARNING", "No injection points found at this level")
+        _log("INFO", "Try a higher --level (2 adds cookies, 3 adds common "
+                      "headers, 5 scans most remaining headers).")
         session.close()
         return 1
 
