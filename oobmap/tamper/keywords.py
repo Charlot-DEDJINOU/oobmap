@@ -2,9 +2,7 @@ import random
 import re
 from typing import Callable
 
-
-def inline_comments(payload: str) -> str:
-    return payload.replace(" ", "/**/")
+from .whitespace import inline_comments, space_to_random_blank
 
 
 def randomize_case(payload: str) -> str:
@@ -38,11 +36,6 @@ def between_comments(payload: str) -> str:
 
 
 from .encoding import hex_encode_strings, double_url_encode, url_encode
-
-
-def space_to_random_blank(payload: str) -> str:
-    blanks = ["\t", "\n", "\x0b", "\x0c", "\r"]
-    return "".join(random.choice(blanks) if c == " " else c for c in payload)
 
 
 TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
