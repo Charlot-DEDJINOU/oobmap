@@ -1,5 +1,6 @@
 import unittest
 from oobmap.tamper import apply_tampers, TAMPERS, tamper_warnings
+from oobmap.tamper.rewrites import if2case
 
 
 class TamperTests(unittest.TestCase):
@@ -109,3 +110,41 @@ class TamperWarningsTests(unittest.TestCase):
 
     def test_no_warning_for_empty_chain(self):
         self.assertEqual(tamper_warnings([], "postgres-program"), [])
+
+
+class If2CaseTests(unittest.TestCase):
+    def test_simple_ternary(self):
+        result = if2case("IF(1=1,2,3)")
+        self.assertEqual(result, "CASE WHEN (1=1) THEN (2) ELSE (3) END")
+
+    def test_nested_function_calls_in_arguments(self):
+        payload = "IF(LENGTH(h)>62,CONCAT('.',MID(h,63,62)),'')"
+        result = if2case(payload)
+        self.assertEqual(
+            result,
+            "CASE WHEN (LENGTH(h)>62) THEN (CONCAT('.',MID(h,63,62))) ELSE ('') END",
+        )
+
+    def test_no_match_passthrough(self):
+        self.assertEqual(if2case("SELECT 1"), "SELECT 1")
+
+    def test_malformed_arg_count_left_untouched(self):
+        self.assertEqual(if2case("IF(1,2)"), "IF(1,2)")
+
+    def test_nested_if_inside_then_argument(self):
+        result = if2case("IF(1,IF(2,3,4),5)")
+        self.assertEqual(
+            result,
+            "CASE WHEN (1) THEN (CASE WHEN (2) THEN (3) ELSE (4) END) ELSE (5) END",
+        )
+
+    def test_case_insensitive_match(self):
+        result = if2case("if(1,2,3)")
+        self.assertEqual(result, "CASE WHEN (1) THEN (2) ELSE (3) END")
+
+    def test_multiple_occurrences(self):
+        result = if2case("IF(1,2,3) AND IF(4,5,6)")
+        self.assertEqual(
+            result,
+            "CASE WHEN (1) THEN (2) ELSE (3) END AND CASE WHEN (4) THEN (5) ELSE (6) END",
+        )
