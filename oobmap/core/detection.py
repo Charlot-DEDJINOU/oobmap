@@ -25,6 +25,7 @@ _DBMS_DISPLAY = {
     "postgres-program": "PostgreSQL",
     "postgres-dblink":  "PostgreSQL",
     "oracle-http":      "Oracle",
+    "oracle-dns":       "Oracle",
     "sqlite-http":      "SQLite",
 }
 

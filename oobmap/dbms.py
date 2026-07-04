@@ -227,7 +227,9 @@ DBMS = {name: DbmsProfile(name) for name in METADATA}
 METADATA["postgres-dblink"] = METADATA["postgres-program"]
 METADATA["mssql-cmdshell"] = METADATA["mssql"]
 METADATA["mysql-stacked"] = METADATA["mysql"]
+METADATA["oracle-dns"] = METADATA["oracle-http"]
 
 DBMS["postgres-dblink"] = DbmsProfile("postgres-program")
 DBMS["mssql-cmdshell"] = DbmsProfile("mssql")
 DBMS["mysql-stacked"] = DbmsProfile("mysql")
+DBMS["oracle-dns"] = DbmsProfile("oracle-http")

