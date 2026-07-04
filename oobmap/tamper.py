@@ -46,12 +46,24 @@ def double_url_encode(payload: str) -> str:
     return quote(quote(payload, safe=""), safe="")
 
 
+def url_encode(payload: str) -> str:
+    from urllib.parse import quote
+    return quote(payload, safe="")
+
+
+def space_to_random_blank(payload: str) -> str:
+    blanks = ["\t", "\n", "\x0b", "\x0c", "\r"]
+    return "".join(random.choice(blanks) if c == " " else c for c in payload)
+
+
 TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
-    "inline-comments":    (inline_comments,    "Replace spaces with /**/"),
-    "randomize-case":     (randomize_case,     "Randomly capitalize SQL keywords"),
-    "between-comments":   (between_comments,   "Split keywords mid-word: SEL/**/ECT"),
-    "hex-encode-strings": (hex_encode_strings, "Convert 'string' literals to 0x hex"),
-    "double-url-encode":  (double_url_encode,  "Double URL-encode the full payload"),
+    "inline-comments":    (inline_comments,       "Replace spaces with /**/"),
+    "randomize-case":     (randomize_case,        "Randomly capitalize SQL keywords"),
+    "between-comments":   (between_comments,      "Split keywords mid-word: SEL/**/ECT"),
+    "hex-encode-strings": (hex_encode_strings,    "Convert 'string' literals to 0x hex"),
+    "double-url-encode":  (double_url_encode,     "Double URL-encode the full payload"),
+    "url-encode":         (url_encode,            "URL-encode the full payload once"),
+    "space2randomblank":  (space_to_random_blank, "Replace spaces with a random whitespace character (tab/newline/etc.)"),
 }
 
 
