@@ -1,5 +1,5 @@
 import unittest
-from oobmap.tamper import apply_tampers, TAMPERS
+from oobmap.tamper import apply_tampers, TAMPERS, tamper_warnings
 
 
 class TamperTests(unittest.TestCase):
@@ -73,3 +73,39 @@ class TamperTests(unittest.TestCase):
                     "hex-encode-strings", "double-url-encode",
                     "url-encode", "space2randomblank"}
         self.assertEqual(set(TAMPERS.keys()), expected)
+
+
+class TamperWarningsTests(unittest.TestCase):
+    def test_hex_encode_strings_warns_for_postgres(self):
+        warnings = tamper_warnings(["hex-encode-strings"], "postgres-program")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("hex-encode-strings", warnings[0])
+
+    def test_hex_encode_strings_warns_for_sqlite(self):
+        warnings = tamper_warnings(["hex-encode-strings"], "sqlite-http")
+        self.assertEqual(len(warnings), 1)
+
+    def test_hex_encode_strings_warns_for_oracle(self):
+        warnings = tamper_warnings(["hex-encode-strings"], "oracle-http")
+        self.assertEqual(len(warnings), 1)
+
+    def test_hex_encode_strings_no_warning_for_mysql(self):
+        self.assertEqual(tamper_warnings(["hex-encode-strings"], "mysql"), [])
+
+    def test_hex_encode_strings_no_warning_for_mysql_stacked(self):
+        self.assertEqual(tamper_warnings(["hex-encode-strings"], "mysql-stacked"), [])
+
+    def test_hex_encode_strings_no_warning_for_mssql(self):
+        self.assertEqual(tamper_warnings(["hex-encode-strings"], "mssql"), [])
+
+    def test_hex_encode_strings_no_warning_for_mssql_cmdshell(self):
+        self.assertEqual(tamper_warnings(["hex-encode-strings"], "mssql-cmdshell"), [])
+
+    def test_hex_encode_strings_no_warning_when_dbms_none(self):
+        self.assertEqual(tamper_warnings(["hex-encode-strings"], None), [])
+
+    def test_no_warning_without_hex_encode_strings_in_chain(self):
+        self.assertEqual(tamper_warnings(["randomize-case"], "postgres-program"), [])
+
+    def test_no_warning_for_empty_chain(self):
+        self.assertEqual(tamper_warnings([], "postgres-program"), [])

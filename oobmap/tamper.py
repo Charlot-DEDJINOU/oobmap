@@ -72,3 +72,21 @@ def apply_tampers(payload: str, names: list[str]) -> str:
         fn, _ = TAMPERS[name]
         payload = fn(payload)
     return payload
+
+
+# Tampers whose SQL rewriting only works for specific DBMS dialects.
+# hex-encode-strings relies on bare 0x<hex> literal syntax, only valid in MySQL/MSSQL.
+_HEX_ENCODE_COMPATIBLE_DBMS = {"mysql", "mysql-stacked", "mssql", "mssql-cmdshell"}
+
+
+def tamper_warnings(tamper_names: list[str], dbms: str | None) -> list[str]:
+    """Return human-readable warnings for tamper/DBMS combinations known to
+    break query syntax. Advisory only — callers print these and continue;
+    this function never raises and never blocks execution."""
+    warnings = []
+    if "hex-encode-strings" in tamper_names and dbms and dbms not in _HEX_ENCODE_COMPATIBLE_DBMS:
+        warnings.append(
+            "tamper 'hex-encode-strings' emits bare 0x<hex> literals, valid "
+            f"only in MySQL/MSSQL — likely to break query syntax for --dbms {dbms}."
+        )
+    return warnings
