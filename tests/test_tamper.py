@@ -1,6 +1,6 @@
 import unittest
 from oobmap.tamper import apply_tampers, TAMPERS, tamper_warnings
-from oobmap.tamper.rewrites import if2case
+from oobmap.tamper.rewrites import if2case, ord2ascii, sp_password
 
 
 class TamperTests(unittest.TestCase):
@@ -148,3 +148,25 @@ class If2CaseTests(unittest.TestCase):
             result,
             "CASE WHEN (1) THEN (2) ELSE (3) END AND CASE WHEN (4) THEN (5) ELSE (6) END",
         )
+
+
+class Ord2AsciiTests(unittest.TestCase):
+    def test_replaces_ord_call(self):
+        self.assertEqual(ord2ascii("ORD('A')"), "ASCII('A')")
+
+    def test_case_insensitive(self):
+        self.assertEqual(ord2ascii("ord('a')"), "ASCII('a')")
+
+    def test_noop_without_match(self):
+        self.assertEqual(ord2ascii("SELECT 1"), "SELECT 1")
+
+    def test_word_boundary_prevents_false_match(self):
+        self.assertEqual(ord2ascii("COORD(1)"), "COORD(1)")
+
+
+class SpPasswordTests(unittest.TestCase):
+    def test_appends_sp_password(self):
+        self.assertEqual(sp_password("SELECT 1-- -"), "SELECT 1-- - sp_password")
+
+    def test_appends_to_empty_string(self):
+        self.assertEqual(sp_password(""), " sp_password")

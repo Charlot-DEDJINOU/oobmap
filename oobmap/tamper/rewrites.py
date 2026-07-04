@@ -65,3 +65,11 @@ def if2case(payload: str) -> str:
     before = payload[:match.start()]
     after = if2case(payload[close_idx + 1:])
     return before + replacement + after
+
+
+def ord2ascii(payload: str) -> str:
+    return re.sub(r"\bORD\(", "ASCII(", payload, flags=re.IGNORECASE)
+
+
+def sp_password(payload: str) -> str:
+    return payload + " sp_password"
