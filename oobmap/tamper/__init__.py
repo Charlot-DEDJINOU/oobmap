@@ -1,3 +1,4 @@
+import difflib
 from typing import Callable
 
 from .encoding import hex_encode_strings, double_url_encode, url_encode
@@ -128,6 +129,22 @@ def apply_tampers(payload: str, names: list[str]) -> str:
     return payload
 
 
+def validate_tamper_names(tamper_names: list[str]) -> None:
+    """Raise SystemExit listing unknown tamper names, suggesting the closest
+    valid name via difflib for each one where a close match exists."""
+    unknown = [t for t in tamper_names if t not in TAMPERS]
+    if not unknown:
+        return
+    parts = []
+    for name in unknown:
+        matches = difflib.get_close_matches(name, TAMPERS.keys(), n=1, cutoff=0.6)
+        if matches:
+            parts.append(f"'{name}' (did you mean '{matches[0]}'?)")
+        else:
+            parts.append(f"'{name}'")
+    raise SystemExit(f"unknown tamper(s): {', '.join(parts)}. Run 'oobmap tampers' for the list.")
+
+
 # Tampers whose SQL rewriting only works for specific DBMS dialects.
 # hex-encode-strings relies on bare 0x<hex> literal syntax, only valid in MySQL/MSSQL.
 _HEX_ENCODE_COMPATIBLE_DBMS = {"mysql", "mysql-stacked", "mssql", "mssql-cmdshell"}
@@ -198,4 +215,4 @@ def tamper_warnings(tamper_names: list[str], dbms: str | None) -> list[str]:
     return warnings
 
 
-__all__ = ["TAMPERS", "apply_tampers", "tamper_warnings"]
+__all__ = ["TAMPERS", "apply_tampers", "tamper_warnings", "validate_tamper_names"]

@@ -1,5 +1,5 @@
 import unittest
-from oobmap.tamper import apply_tampers, TAMPERS, tamper_warnings
+from oobmap.tamper import apply_tampers, TAMPERS, tamper_warnings, validate_tamper_names
 from oobmap.tamper.rewrites import if2case, ord2ascii, sp_password
 from oobmap.tamper.operators import (
     between,
@@ -662,3 +662,28 @@ class Plus2ConcatTests(unittest.TestCase):
 class Plus2FnConcatTests(unittest.TestCase):
     def test_rewrites_with_odbc_function_escape(self):
         self.assertEqual(plus2fnconcat("'a'+b"), "{fn CONCAT('a',b)}")
+
+
+class ValidateTamperNamesTests(unittest.TestCase):
+    def test_all_known_names_is_noop(self):
+        validate_tamper_names(["inline-comments", "scientific"])
+
+    def test_empty_list_is_noop(self):
+        validate_tamper_names([])
+
+    def test_unknown_name_with_close_match_suggests_it(self):
+        with self.assertRaises(SystemExit) as ctx:
+            validate_tamper_names(["scientfic"])
+        self.assertIn("did you mean 'scientific'", str(ctx.exception))
+
+    def test_unknown_name_without_close_match_has_no_suggestion(self):
+        with self.assertRaises(SystemExit) as ctx:
+            validate_tamper_names(["zzzzzzzzzzzzzzzz"])
+        self.assertNotIn("did you mean", str(ctx.exception))
+
+    def test_multiple_unknowns_each_get_own_treatment(self):
+        with self.assertRaises(SystemExit) as ctx:
+            validate_tamper_names(["scientfic", "zzzzzzzzzzzzzzzz"])
+        message = str(ctx.exception)
+        self.assertIn("did you mean 'scientific'", message)
+        self.assertIn("zzzzzzzzzzzzzzzz", message)
