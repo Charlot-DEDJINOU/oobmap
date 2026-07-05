@@ -47,6 +47,18 @@ from .keywords_extra import (
     luanginxmore,
 )
 from .rewrites import if2case, ord2ascii, sp_password
+from .operators import (
+    between,
+    equaltolike,
+    equaltorlike,
+    greatest,
+    least,
+    symboliclogical,
+    plus2concat,
+    plus2fnconcat,
+    binary,
+    scientific,
+)
 
 TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
     "inline-comments":    (inline_comments,       "Replace spaces with /**/"),
@@ -96,6 +108,16 @@ TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
     "uppercase":                 (uppercase,                 "Uppercase common SQL keywords"),
     "luanginx":                  (luanginx,                  "Append trailing padding to bypass Lua-Nginx/Cloudflare body-size WAF checks"),
     "luanginxmore":              (luanginxmore,               "Same as luanginx with larger padding"),
+    "between":         (between,         "Rewrite X>N as X NOT BETWEEN 0 AND N, X=N as X BETWEEN N AND N"),
+    "equaltolike":      (equaltolike,     "Replace = with LIKE"),
+    "equaltorlike":     (equaltorlike,    "Replace = with RLIKE (MySQL)"),
+    "greatest":         (greatest,        "Rewrite A>B as GREATEST(A,B)<>B"),
+    "least":            (least,           "Rewrite A<B as LEAST(A,B)<>B"),
+    "symboliclogical":  (symboliclogical, "Replace AND/OR with && / ||"),
+    "plus2concat":      (plus2concat,     "Rewrite A+B as CONCAT(A,B)"),
+    "plus2fnconcat":    (plus2fnconcat,   "Rewrite A+B as the ODBC {fn CONCAT(A,B)} form"),
+    "binary":           (binary,          "Prepend BINARY before every quoted string (MySQL)"),
+    "scientific":       (scientific,      "Rewrite integer literals in scientific notation (N -> Ne0)"),
 }
 
 
@@ -123,6 +145,15 @@ _VERSIONED_COMMENT_TAMPERS = {
 }
 _VERSIONED_COMMENT_COMPATIBLE_DBMS = {"mysql", "mysql-stacked"}
 
+# equaltorlike (RLIKE) and binary (BINARY keyword) are MySQL-specific syntax.
+_MYSQL_ONLY_TAMPERS = {"equaltorlike", "binary"}
+_MYSQL_ONLY_COMPATIBLE_DBMS = {"mysql", "mysql-stacked"}
+
+# plus2concat/plus2fnconcat emit CONCAT()/{fn CONCAT()} calls; SQLite has no
+# CONCAT() function at all (it uses the || operator instead).
+_CONCAT_TAMPERS = {"plus2concat", "plus2fnconcat"}
+_CONCAT_INCOMPATIBLE_DBMS = {"sqlite-http"}
+
 
 def tamper_warnings(tamper_names: list[str], dbms: str | None) -> list[str]:
     """Return human-readable warnings for tamper/DBMS combinations known to
@@ -146,6 +177,23 @@ def tamper_warnings(tamper_names: list[str], dbms: str | None) -> list[str]:
                 f"tamper '{name}' relies on MySQL's /*! ... */ executable-comment "
                 f"syntax — the wrapped keyword is silently stripped as a plain "
                 f"comment for --dbms {dbms}, likely to break query syntax."
+            )
+
+    used_mysql_only_tampers = set(tamper_names) & _MYSQL_ONLY_TAMPERS
+    if used_mysql_only_tampers and dbms and dbms not in _MYSQL_ONLY_COMPATIBLE_DBMS:
+        for name in sorted(used_mysql_only_tampers):
+            warnings.append(
+                f"tamper '{name}' emits MySQL-specific syntax — "
+                f"likely to break query syntax for --dbms {dbms}."
+            )
+
+    used_concat_tampers = set(tamper_names) & _CONCAT_TAMPERS
+    if used_concat_tampers and dbms in _CONCAT_INCOMPATIBLE_DBMS:
+        for name in sorted(used_concat_tampers):
+            warnings.append(
+                f"tamper '{name}' emits a CONCAT() call, which SQLite does not "
+                f"support (it uses the || operator) — likely to break query "
+                f"syntax for --dbms {dbms}."
             )
     return warnings
 

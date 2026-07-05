@@ -172,7 +172,19 @@ class TamperTests(unittest.TestCase):
         result = apply_tampers("SELECT 1", ["luanginx"])
         self.assertTrue(result.startswith("SELECT 1 -- "))
 
-    def test_all_forty_seven_tampers_registered(self):
+    def test_scientific_via_apply_tampers(self):
+        result = apply_tampers("LIMIT 5", ["scientific"])
+        self.assertEqual(result, "LIMIT 5e0")
+
+    def test_symboliclogical_via_apply_tampers(self):
+        result = apply_tampers("1 AND 2", ["symboliclogical"])
+        self.assertEqual(result, "1 && 2")
+
+    def test_plus2concat_via_apply_tampers(self):
+        result = apply_tampers("'a'+b", ["plus2concat"])
+        self.assertEqual(result, "CONCAT('a',b)")
+
+    def test_all_fifty_seven_tampers_registered(self):
         expected = {"inline-comments", "randomize-case", "between-comments",
                     "hex-encode-strings", "double-url-encode",
                     "url-encode", "space2randomblank",
@@ -189,7 +201,10 @@ class TamperTests(unittest.TestCase):
                     "versionedkeywords", "versionedmorekeywords",
                     "halfversionedmorekeywords", "modsecurityversioned",
                     "modsecurityzeroversioned", "randomcomments",
-                    "lowercase", "uppercase", "luanginx", "luanginxmore"}
+                    "lowercase", "uppercase", "luanginx", "luanginxmore",
+                    "between", "equaltolike", "equaltorlike",
+                    "greatest", "least", "symboliclogical",
+                    "plus2concat", "plus2fnconcat", "binary", "scientific"}
         self.assertEqual(set(TAMPERS.keys()), expected)
 
 
@@ -255,6 +270,22 @@ class TamperWarningsTests(unittest.TestCase):
 
     def test_no_versioned_comment_warning_when_dbms_none(self):
         self.assertEqual(tamper_warnings(["versionedmorekeywords"], None), [])
+
+    def test_equaltorlike_warns_for_postgres(self):
+        warnings = tamper_warnings(["equaltorlike"], "postgres-program")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("equaltorlike", warnings[0])
+
+    def test_binary_no_warning_for_mysql(self):
+        self.assertEqual(tamper_warnings(["binary"], "mysql"), [])
+
+    def test_plus2concat_warns_for_sqlite(self):
+        warnings = tamper_warnings(["plus2concat"], "sqlite-http")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("plus2concat", warnings[0])
+
+    def test_plus2fnconcat_no_warning_for_mysql(self):
+        self.assertEqual(tamper_warnings(["plus2fnconcat"], "mysql"), [])
 
 
 class If2CaseTests(unittest.TestCase):

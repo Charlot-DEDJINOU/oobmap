@@ -436,6 +436,16 @@ Current tampers:
 | `uppercase` | Uppercase common SQL keywords |
 | `luanginx` | Append trailing padding to bypass Lua-Nginx/Cloudflare body-size WAF checks |
 | `luanginxmore` | Same as `luanginx` with larger padding |
+| `between` | Rewrite `X>N` as `X NOT BETWEEN 0 AND N`, `X=N` as `X BETWEEN N AND N` |
+| `equaltolike` | Replace `=` with `LIKE` |
+| `equaltorlike` | Replace `=` with `RLIKE` (MySQL) |
+| `greatest` | Rewrite `A>B` as `GREATEST(A,B)<>B` |
+| `least` | Rewrite `A<B` as `LEAST(A,B)<>B` |
+| `symboliclogical` | Replace `AND`/`OR` with `&&` / `\|\|` |
+| `plus2concat` | Rewrite `A+B` as `CONCAT(A,B)` |
+| `plus2fnconcat` | Rewrite `A+B` as the ODBC `{fn CONCAT(A,B)}` form |
+| `binary` | Prepend `BINARY` before every quoted string (MySQL) |
+| `scientific` | Rewrite integer literals in scientific notation (`N` -> `Ne0`) |
 
 Chain multiple tampers with a comma-separated list, applied in order:
 
@@ -479,6 +489,11 @@ rely on MySQL's `/*! ... */` executable-comment syntax — on every other engine
           syntax — the wrapped keyword is silently stripped as a plain comment for
           --dbms postgres-program, likely to break query syntax.
 ```
+
+`equaltorlike` and `binary` emit MySQL-specific syntax (`RLIKE`, the
+`BINARY` keyword); `plus2concat`/`plus2fnconcat` emit `CONCAT()` calls,
+which SQLite doesn't support (SQLite has no `CONCAT()` function, only the
+`||` operator) — both combinations print a warning and still run.
 
 ## How Extraction Works
 
