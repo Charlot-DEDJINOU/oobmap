@@ -22,6 +22,10 @@ from oobmap.tamper.whitespace_extra import (
     bluecoat,
     commentbeforeparentheses,
     multiplespaces,
+    space2dash,
+    space2hash,
+    space2morecomment,
+    space2morehash,
 )
 
 
@@ -354,3 +358,30 @@ class MultipleSpacesTests(unittest.TestCase):
 
     def test_noop_without_keyword(self):
         self.assertEqual(multiplespaces("SUM(x)"), "SUM(x)")
+
+
+class SpaceCommentTests(unittest.TestCase):
+    def test_space2dash_no_literal_spaces_remain(self):
+        result = space2dash("SELECT 1 FROM users")
+        self.assertNotIn(" ", result)
+        self.assertIn("--", result)
+        self.assertIn("\n", result)
+
+    def test_space2hash_no_literal_spaces_remain(self):
+        result = space2hash("SELECT 1 FROM users")
+        self.assertNotIn(" ", result)
+        self.assertIn("#", result)
+        self.assertIn("\n", result)
+
+    def test_space2morecomment_replaces_with_fixed_literal(self):
+        self.assertEqual(space2morecomment("a b"), "a/**_**/b")
+
+    def test_space2morehash_no_literal_spaces_remain(self):
+        result = space2morehash("a b")
+        self.assertNotIn(" ", result)
+        self.assertIn("#", result)
+
+    def test_space2morehash_uses_longer_random_body_than_space2hash(self):
+        result_hash = space2hash("a b")
+        result_morehash = space2morehash("a b")
+        self.assertGreater(len(result_morehash), len(result_hash))
