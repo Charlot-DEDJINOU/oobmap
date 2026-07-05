@@ -23,3 +23,15 @@ def escapequotes(payload: str) -> str:
 
 def percentage(payload: str) -> str:
     return "".join(f"%{c}" for c in payload)
+
+
+def decentities(payload: str) -> str:
+    return "".join(f"&#{ord(c)};" for c in payload)
+
+
+def hexentities(payload: str) -> str:
+    return "".join(f"&#x{ord(c):X};" for c in payload)
+
+
+def htmlencode(payload: str) -> str:
+    return "".join(f"&#{ord(c)};" if not c.isalnum() else c for c in payload)

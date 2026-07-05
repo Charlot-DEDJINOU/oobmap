@@ -8,6 +8,9 @@ from oobmap.tamper.encoding_extra import (
     base64encode,
     escapequotes,
     percentage,
+    decentities,
+    hexentities,
+    htmlencode,
 )
 
 
@@ -228,3 +231,17 @@ class EncodingExtraBasicTests(unittest.TestCase):
 
     def test_percentage_prefixes_each_char(self):
         self.assertEqual(percentage("AB"), "%A%B")
+
+
+class HtmlEntityTests(unittest.TestCase):
+    def test_decentities_encodes_every_character(self):
+        self.assertEqual(decentities("Ab"), "&#65;&#98;")
+
+    def test_hexentities_encodes_every_character(self):
+        self.assertEqual(hexentities("'"), "&#x27;")
+
+    def test_htmlencode_skips_alphanumeric(self):
+        self.assertEqual(htmlencode("Ab1'"), "Ab1&#39;")
+
+    def test_htmlencode_encodes_all_when_no_alnum(self):
+        self.assertEqual(htmlencode("' "), "&#39;&#32;")
