@@ -539,6 +539,16 @@ class PackagingSmokeTest(unittest.TestCase):
         self.assertIn("--check", result.stdout)
         self.assertIn("--risk", result.stdout)
 
+    def test_cli_help_includes_examples_epilog(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "oobmap.cli", "--help"],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertIn("Examples:", result.stdout)
+        self.assertIn('--expr "SELECT DB_NAME()"', result.stdout)
+        self.assertIn("oobmap tampers", result.stdout)
+
     def test_cli_entry_point_main_is_importable(self):
         from oobmap.cli import main
         self.assertTrue(callable(main))

