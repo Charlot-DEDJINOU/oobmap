@@ -148,7 +148,19 @@ class TamperTests(unittest.TestCase):
         result = apply_tampers("a b", ["space2mysqldash"])
         self.assertEqual(result, "a--\nb")
 
-    def test_all_thirty_seven_tampers_registered(self):
+    def test_uppercase_via_apply_tampers(self):
+        result = apply_tampers("select 1", ["uppercase"])
+        self.assertEqual(result, "SELECT 1")
+
+    def test_modsecurityversioned_via_apply_tampers(self):
+        result = apply_tampers("SELECT 1", ["modsecurityversioned"])
+        self.assertEqual(result, "/*!SELECT 1*/")
+
+    def test_luanginx_via_apply_tampers(self):
+        result = apply_tampers("SELECT 1", ["luanginx"])
+        self.assertTrue(result.startswith("SELECT 1 -- "))
+
+    def test_all_forty_seven_tampers_registered(self):
         expected = {"inline-comments", "randomize-case", "between-comments",
                     "hex-encode-strings", "double-url-encode",
                     "url-encode", "space2randomblank",
@@ -161,7 +173,11 @@ class TamperTests(unittest.TestCase):
                     "bluecoat", "commentbeforeparentheses", "multiplespaces",
                     "space2dash", "space2hash", "space2morecomment",
                     "space2morehash", "space2mssqlblank", "space2mssqlhash",
-                    "space2mysqlblank", "space2mysqldash", "space2plus"}
+                    "space2mysqlblank", "space2mysqldash", "space2plus",
+                    "versionedkeywords", "versionedmorekeywords",
+                    "halfversionedmorekeywords", "modsecurityversioned",
+                    "modsecurityzeroversioned", "randomcomments",
+                    "lowercase", "uppercase", "luanginx", "luanginxmore"}
         self.assertEqual(set(TAMPERS.keys()), expected)
 
 
@@ -213,6 +229,20 @@ class TamperWarningsTests(unittest.TestCase):
 
     def test_sp_password_no_warning_when_dbms_none(self):
         self.assertEqual(tamper_warnings(["sp_password"], None), [])
+
+    def test_versionedkeywords_warns_for_postgres(self):
+        warnings = tamper_warnings(["versionedkeywords"], "postgres-program")
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("versionedkeywords", warnings[0])
+
+    def test_modsecurityversioned_no_warning_for_mysql(self):
+        self.assertEqual(tamper_warnings(["modsecurityversioned"], "mysql"), [])
+
+    def test_halfversionedmorekeywords_no_warning_for_mysql_stacked(self):
+        self.assertEqual(tamper_warnings(["halfversionedmorekeywords"], "mysql-stacked"), [])
+
+    def test_no_versioned_comment_warning_when_dbms_none(self):
+        self.assertEqual(tamper_warnings(["versionedmorekeywords"], None), [])
 
 
 class If2CaseTests(unittest.TestCase):

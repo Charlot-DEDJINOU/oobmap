@@ -426,6 +426,16 @@ Current tampers:
 | `space2mysqlblank` | Replace spaces with a random blank token (MySQL) |
 | `space2mysqldash` | Replace spaces with `--` plus a newline (MySQL) |
 | `space2plus` | Replace spaces with `+` |
+| `versionedkeywords` | Wrap `SELECT`/`FROM`/`WHERE`/`AND`/`OR`/`UNION` individually in `/*! ... */` (MySQL) |
+| `versionedmorekeywords` | Wrap a broader keyword set individually in `/*! ... */` (MySQL) |
+| `halfversionedmorekeywords` | Prepend `/*!` before each keyword, close once at the end (MySQL) |
+| `modsecurityversioned` | Wrap the whole payload in `/*! ... */` (MySQL) |
+| `modsecurityzeroversioned` | Wrap the whole payload in `/*!00000 ... */` (MySQL) |
+| `randomcomments` | Insert `/**/` at a random position within common keywords |
+| `lowercase` | Lowercase common SQL keywords |
+| `uppercase` | Uppercase common SQL keywords |
+| `luanginx` | Append trailing padding to bypass Lua-Nginx/Cloudflare body-size WAF checks |
+| `luanginxmore` | Same as `luanginx` with larger padding |
 
 Chain multiple tampers with a comma-separated list, applied in order:
 
@@ -457,6 +467,17 @@ than blocking:
 ```text
 [WARNING] tamper 'sp_password' only hides queries from MSSQL logs — has no
           effect for --dbms mysql.
+```
+
+The 5 versioned-comment tampers (`versionedkeywords`, `versionedmorekeywords`,
+`halfversionedmorekeywords`, `modsecurityversioned`, `modsecurityzeroversioned`)
+rely on MySQL's `/*! ... */` executable-comment syntax — on every other engine
+`/* ... */` is a standard comment, so the wrapped keyword is silently stripped:
+
+```text
+[WARNING] tamper 'versionedkeywords' relies on MySQL's /*! ... */ executable-comment
+          syntax — the wrapped keyword is silently stripped as a plain comment for
+          --dbms postgres-program, likely to break query syntax.
 ```
 
 ## How Extraction Works

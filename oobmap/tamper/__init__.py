@@ -34,6 +34,18 @@ from .whitespace_extra import (
     space2plus,
 )
 from .keywords import randomize_case, between_comments
+from .keywords_extra import (
+    versionedkeywords,
+    versionedmorekeywords,
+    halfversionedmorekeywords,
+    modsecurityversioned,
+    modsecurityzeroversioned,
+    randomcomments,
+    lowercase,
+    uppercase,
+    luanginx,
+    luanginxmore,
+)
 from .rewrites import if2case, ord2ascii, sp_password
 
 TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
@@ -74,6 +86,16 @@ TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
     "space2mysqlblank":      (space2mysqlblank,       "Replace spaces with a random blank token (MySQL)"),
     "space2mysqldash":       (space2mysqldash,        "Replace spaces with -- plus a newline (MySQL)"),
     "space2plus":            (space2plus,             "Replace spaces with +"),
+    "versionedkeywords":         (versionedkeywords,         "Wrap SELECT/FROM/WHERE/AND/OR/UNION individually in /*! ... */ (MySQL)"),
+    "versionedmorekeywords":     (versionedmorekeywords,     "Wrap a broader keyword set individually in /*! ... */ (MySQL)"),
+    "halfversionedmorekeywords": (halfversionedmorekeywords, "Prepend /*! before each keyword, close once at the end (MySQL)"),
+    "modsecurityversioned":      (modsecurityversioned,      "Wrap the whole payload in /*! ... */ (MySQL)"),
+    "modsecurityzeroversioned":  (modsecurityzeroversioned,  "Wrap the whole payload in /*!00000 ... */ (MySQL)"),
+    "randomcomments":            (randomcomments,            "Insert /**/ at a random position within common keywords"),
+    "lowercase":                 (lowercase,                 "Lowercase common SQL keywords"),
+    "uppercase":                 (uppercase,                 "Uppercase common SQL keywords"),
+    "luanginx":                  (luanginx,                  "Append trailing padding to bypass Lua-Nginx/Cloudflare body-size WAF checks"),
+    "luanginxmore":              (luanginxmore,               "Same as luanginx with larger padding"),
 }
 
 
@@ -92,6 +114,15 @@ _HEX_ENCODE_COMPATIBLE_DBMS = {"mysql", "mysql-stacked", "mssql", "mssql-cmdshel
 # MSSQL-specific); it's a harmless no-op elsewhere, not a syntax break.
 _SP_PASSWORD_COMPATIBLE_DBMS = {"mssql", "mssql-cmdshell"}
 
+# The 5 versioned-comment tampers rely on MySQL's /*! ... */ executable-comment
+# syntax; on every other engine /* ... */ is a standard comment, so the wrapped
+# keyword text is silently stripped from the parsed query.
+_VERSIONED_COMMENT_TAMPERS = {
+    "versionedkeywords", "versionedmorekeywords", "halfversionedmorekeywords",
+    "modsecurityversioned", "modsecurityzeroversioned",
+}
+_VERSIONED_COMMENT_COMPATIBLE_DBMS = {"mysql", "mysql-stacked"}
+
 
 def tamper_warnings(tamper_names: list[str], dbms: str | None) -> list[str]:
     """Return human-readable warnings for tamper/DBMS combinations known to
@@ -108,6 +139,14 @@ def tamper_warnings(tamper_names: list[str], dbms: str | None) -> list[str]:
             "tamper 'sp_password' only hides queries from MSSQL logs — "
             f"has no effect for --dbms {dbms}."
         )
+    used_versioned_comment_tampers = set(tamper_names) & _VERSIONED_COMMENT_TAMPERS
+    if used_versioned_comment_tampers and dbms and dbms not in _VERSIONED_COMMENT_COMPATIBLE_DBMS:
+        for name in sorted(used_versioned_comment_tampers):
+            warnings.append(
+                f"tamper '{name}' relies on MySQL's /*! ... */ executable-comment "
+                f"syntax — the wrapped keyword is silently stripped as a plain "
+                f"comment for --dbms {dbms}, likely to break query syntax."
+            )
     return warnings
 
 
