@@ -7,6 +7,9 @@ from oobmap.tamper.operators import (
     equaltorlike,
     greatest,
     least,
+    symboliclogical,
+    binary,
+    scientific,
 )
 from oobmap.tamper.encoding_extra import (
     apostrophemask,
@@ -589,3 +592,27 @@ class LeastTests(unittest.TestCase):
 
     def test_does_not_corrupt_less_or_equal(self):
         self.assertEqual(least("a<=b"), "a<=b")
+
+
+class SymbolicLogicalTests(unittest.TestCase):
+    def test_replaces_and(self):
+        self.assertEqual(symboliclogical("1 AND 2"), "1 && 2")
+
+    def test_replaces_or(self):
+        self.assertEqual(symboliclogical("1 OR 2"), "1 || 2")
+
+
+class BinaryTests(unittest.TestCase):
+    def test_prepends_binary_before_string(self):
+        self.assertEqual(binary("name='admin'"), "name=BINARY 'admin'")
+
+    def test_multiple_strings(self):
+        self.assertEqual(binary("'a' OR 'b'"), "BINARY 'a' OR BINARY 'b'")
+
+
+class ScientificTests(unittest.TestCase):
+    def test_appends_e0_to_integer(self):
+        self.assertEqual(scientific("LIMIT 100"), "LIMIT 100e0")
+
+    def test_multiple_integers(self):
+        self.assertEqual(scientific("a=1 AND b=2"), "a=1e0 AND b=2e0")

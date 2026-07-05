@@ -26,3 +26,19 @@ def greatest(payload: str) -> str:
 def least(payload: str) -> str:
     pattern = re.compile(_COMPARISON_TOKEN + r"\s*<\s*" + _COMPARISON_TOKEN)
     return pattern.sub(lambda m: f"LEAST({m.group(1)},{m.group(2)})<>{m.group(2)}", payload)
+
+
+_LOGICAL_KEYWORDS = re.compile(r"\b(AND|OR)\b", re.IGNORECASE)
+_SYMBOLIC_LOGICAL = {"and": "&&", "or": "||"}
+
+
+def symboliclogical(payload: str) -> str:
+    return _LOGICAL_KEYWORDS.sub(lambda m: _SYMBOLIC_LOGICAL[m.group(0).lower()], payload)
+
+
+def binary(payload: str) -> str:
+    return re.sub(r"'([^']*)'", lambda m: f"BINARY '{m.group(1)}'", payload)
+
+
+def scientific(payload: str) -> str:
+    return re.sub(r"\b(\d+)\b", r"\1e0", payload)
