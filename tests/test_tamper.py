@@ -32,6 +32,11 @@ from oobmap.tamper.whitespace_extra import (
     space2mysqldash,
     space2plus,
 )
+from oobmap.tamper.keywords_extra import (
+    versionedkeywords,
+    versionedmorekeywords,
+    halfversionedmorekeywords,
+)
 
 
 class TamperTests(unittest.TestCase):
@@ -429,3 +434,35 @@ class SpaceBlankAndDashTests(unittest.TestCase):
 
     def test_space2plus_replaces_with_plus(self):
         self.assertEqual(space2plus("a b c"), "a+b+c")
+
+
+class VersionedKeywordsTests(unittest.TestCase):
+    def test_wraps_select_and_from(self):
+        result = versionedkeywords("SELECT 1 FROM users")
+        self.assertEqual(result, "/*!SELECT*/ 1 /*!FROM*/ users")
+
+    def test_preserves_case(self):
+        result = versionedkeywords("select 1")
+        self.assertEqual(result, "/*!select*/ 1")
+
+    def test_does_not_wrap_if_keyword(self):
+        self.assertEqual(versionedkeywords("IF(1,2,3)"), "IF(1,2,3)")
+
+
+class VersionedMoreKeywordsTests(unittest.TestCase):
+    def test_wraps_if_keyword(self):
+        result = versionedmorekeywords("IF(1,2,3)")
+        self.assertEqual(result, "/*!IF*/(1,2,3)")
+
+    def test_wraps_select(self):
+        result = versionedmorekeywords("SELECT 1")
+        self.assertEqual(result, "/*!SELECT*/ 1")
+
+
+class HalfVersionedMoreKeywordsTests(unittest.TestCase):
+    def test_prepends_open_marker_and_closes_once_at_end(self):
+        result = halfversionedmorekeywords("SELECT 1 FROM users")
+        self.assertEqual(result, "/*!SELECT 1 /*!FROM users*/")
+
+    def test_noop_without_keyword_no_trailing_marker(self):
+        self.assertEqual(halfversionedmorekeywords("1+1"), "1+1")
