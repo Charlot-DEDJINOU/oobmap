@@ -11,6 +11,8 @@ from oobmap.tamper.encoding_extra import (
     decentities,
     hexentities,
     htmlencode,
+    charunicodeencode,
+    charunicodeescape,
 )
 
 
@@ -245,3 +247,14 @@ class HtmlEntityTests(unittest.TestCase):
 
     def test_htmlencode_encodes_all_when_no_alnum(self):
         self.assertEqual(htmlencode("' "), "&#39;&#32;")
+
+
+class UnicodeEncodeTests(unittest.TestCase):
+    def test_charunicodeencode_basic(self):
+        self.assertEqual(charunicodeencode("AB"), "%u0041%u0042")
+
+    def test_charunicodeencode_skips_already_encoded_triplet(self):
+        self.assertEqual(charunicodeencode("a%20b"), "%u0061%20%u0062")
+
+    def test_charunicodeescape_basic(self):
+        self.assertEqual(charunicodeescape("AB"), "\\u0041\\u0042")

@@ -1,4 +1,5 @@
 import base64
+import re
 
 
 def apostrophemask(payload: str) -> str:
@@ -35,3 +36,27 @@ def hexentities(payload: str) -> str:
 
 def htmlencode(payload: str) -> str:
     return "".join(f"&#{ord(c)};" if not c.isalnum() else c for c in payload)
+
+
+_ALREADY_ENCODED = re.compile(r"%[0-9A-Fa-f]{2}")
+
+
+def _unicode_encode(payload: str, template: str) -> str:
+    result = []
+    i = 0
+    while i < len(payload):
+        if payload[i] == "%" and _ALREADY_ENCODED.match(payload, i):
+            result.append(payload[i:i + 3])
+            i += 3
+        else:
+            result.append(template % ord(payload[i]))
+            i += 1
+    return "".join(result)
+
+
+def charunicodeencode(payload: str) -> str:
+    return _unicode_encode(payload, "%%u%04X")
+
+
+def charunicodeescape(payload: str) -> str:
+    return _unicode_encode(payload, "\\u%04X")
