@@ -18,6 +18,11 @@ from oobmap.tamper.encoding_extra import (
     unmagicquotes,
     hex2char,
 )
+from oobmap.tamper.whitespace_extra import (
+    bluecoat,
+    commentbeforeparentheses,
+    multiplespaces,
+)
 
 
 class TamperTests(unittest.TestCase):
@@ -315,3 +320,37 @@ class UnmagicQuotesAndHexToCharTests(unittest.TestCase):
 
     def test_hex2char_noop_without_hex_literal(self):
         self.assertEqual(hex2char("SELECT 1"), "SELECT 1")
+
+
+class BluecoatTests(unittest.TestCase):
+    def test_replaces_first_keyword_space_with_blank(self):
+        result = bluecoat("SELECT 1 FROM users")
+        self.assertTrue(any(f"SELECT{b}1" in result for b in ["%09", "%0a", "%0c", "%0d", "%0b"]))
+
+    def test_replaces_equals_with_like(self):
+        self.assertEqual(bluecoat("a=1"), "a LIKE 1")
+
+    def test_noop_blank_substitution_without_keyword(self):
+        result = bluecoat("a=1")
+        self.assertNotIn("%0", result)
+
+
+class CommentBeforeParenthesesTests(unittest.TestCase):
+    def test_prepends_comment_before_each_paren(self):
+        self.assertEqual(commentbeforeparentheses("SUM(x)"), "SUM/**/(x)")
+
+    def test_multiple_parens(self):
+        self.assertEqual(commentbeforeparentheses("A(B(C))"), "A/**/(B/**/(C))")
+
+
+class MultipleSpacesTests(unittest.TestCase):
+    def test_wraps_and_with_three_spaces(self):
+        result = multiplespaces("1 AND 2")
+        self.assertIn("   AND   ", result)
+
+    def test_preserves_keyword_case(self):
+        result = multiplespaces("1 and 2")
+        self.assertIn("   and   ", result)
+
+    def test_noop_without_keyword(self):
+        self.assertEqual(multiplespaces("SUM(x)"), "SUM(x)")
