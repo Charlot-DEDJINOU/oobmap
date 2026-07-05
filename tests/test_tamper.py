@@ -1,6 +1,14 @@
 import unittest
 from oobmap.tamper import apply_tampers, TAMPERS, tamper_warnings
 from oobmap.tamper.rewrites import if2case, ord2ascii, sp_password
+from oobmap.tamper.encoding_extra import (
+    apostrophemask,
+    apostrophenullencode,
+    appendnullbyte,
+    base64encode,
+    escapequotes,
+    percentage,
+)
 
 
 class TamperTests(unittest.TestCase):
@@ -197,3 +205,26 @@ class SpPasswordTests(unittest.TestCase):
 
     def test_appends_to_empty_string(self):
         self.assertEqual(sp_password(""), " sp_password")
+
+
+class EncodingExtraBasicTests(unittest.TestCase):
+    def test_apostrophemask_replaces_quote(self):
+        self.assertEqual(apostrophemask("O'Brien"), "O%EF%BC%87Brien")
+
+    def test_apostrophenullencode_replaces_quote(self):
+        self.assertEqual(apostrophenullencode("a'b"), "a%00%27b")
+
+    def test_appendnullbyte_appends_at_end(self):
+        self.assertEqual(appendnullbyte("SELECT 1"), "SELECT 1%00")
+
+    def test_base64encode_encodes_payload(self):
+        self.assertEqual(base64encode("admin"), "YWRtaW4=")
+
+    def test_escapequotes_escapes_single_quote(self):
+        self.assertEqual(escapequotes("a'b"), "a\\'b")
+
+    def test_escapequotes_escapes_double_quote(self):
+        self.assertEqual(escapequotes('a"b'), 'a\\"b')
+
+    def test_percentage_prefixes_each_char(self):
+        self.assertEqual(percentage("AB"), "%A%B")
