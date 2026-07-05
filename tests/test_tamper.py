@@ -36,6 +36,8 @@ from oobmap.tamper.keywords_extra import (
     versionedkeywords,
     versionedmorekeywords,
     halfversionedmorekeywords,
+    modsecurityversioned,
+    modsecurityzeroversioned,
 )
 
 
@@ -466,3 +468,11 @@ class HalfVersionedMoreKeywordsTests(unittest.TestCase):
 
     def test_noop_without_keyword_no_trailing_marker(self):
         self.assertEqual(halfversionedmorekeywords("1+1"), "1+1")
+
+
+class ModsecurityCommentTests(unittest.TestCase):
+    def test_modsecurityversioned_wraps_whole_payload(self):
+        self.assertEqual(modsecurityversioned("SELECT 1"), "/*!SELECT 1*/")
+
+    def test_modsecurityzeroversioned_wraps_with_zero_version(self):
+        self.assertEqual(modsecurityzeroversioned("SELECT 1"), "/*!00000SELECT 1*/")

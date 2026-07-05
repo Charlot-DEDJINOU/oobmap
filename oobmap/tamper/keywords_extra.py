@@ -25,3 +25,11 @@ def halfversionedmorekeywords(payload: str) -> str:
     if count:
         result += "*/"
     return result
+
+
+def modsecurityversioned(payload: str) -> str:
+    return f"/*!{payload}*/"
+
+
+def modsecurityzeroversioned(payload: str) -> str:
+    return f"/*!00000{payload}*/"
