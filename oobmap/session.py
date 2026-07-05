@@ -155,6 +155,13 @@ class SessionStore:
         )
         self.conn.commit()
 
+    def get_check(self, check_id: str):
+        row = self.conn.execute(
+            "SELECT * FROM checks WHERE id=?",
+            (check_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
     def catalog_key(self, dbms: str, database: str | None, kind: str, table: str | None = None) -> str:
         return fingerprint(self.target, dbms, database or "", kind, table or "")
 
