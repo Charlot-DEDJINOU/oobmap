@@ -5,6 +5,8 @@ from oobmap.tamper.operators import (
     between,
     equaltolike,
     equaltorlike,
+    greatest,
+    least,
 )
 from oobmap.tamper.encoding_extra import (
     apostrophemask,
@@ -571,3 +573,19 @@ class EqualToLikeTests(unittest.TestCase):
 class EqualToRLikeTests(unittest.TestCase):
     def test_replaces_equals_with_rlike(self):
         self.assertEqual(equaltorlike("a=1"), "a RLIKE 1")
+
+
+class GreatestTests(unittest.TestCase):
+    def test_rewrites_greater_than(self):
+        self.assertEqual(greatest("a>b"), "GREATEST(a,b)<>b")
+
+    def test_does_not_corrupt_greater_or_equal(self):
+        self.assertEqual(greatest("a>=b"), "a>=b")
+
+
+class LeastTests(unittest.TestCase):
+    def test_rewrites_less_than(self):
+        self.assertEqual(least("a<b"), "LEAST(a,b)<>b")
+
+    def test_does_not_corrupt_less_or_equal(self):
+        self.assertEqual(least("a<=b"), "a<=b")
