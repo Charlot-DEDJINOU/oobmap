@@ -15,6 +15,8 @@ from oobmap.tamper.encoding_extra import (
     charunicodeescape,
     overlongutf8,
     overlongutf8more,
+    unmagicquotes,
+    hex2char,
 )
 
 
@@ -271,3 +273,28 @@ class OverlongUtf8Tests(unittest.TestCase):
 
     def test_overlongutf8more_encodes_alphanumeric_too(self):
         self.assertEqual(overlongutf8more("A"), "%C1%81")
+
+
+class UnmagicQuotesAndHexToCharTests(unittest.TestCase):
+    def test_unmagicquotes_replaces_quote_and_appends_comment(self):
+        self.assertEqual(unmagicquotes("a'b"), "a%bf%27b--")
+
+    def test_unmagicquotes_noop_without_quote(self):
+        self.assertEqual(unmagicquotes("SELECT 1"), "SELECT 1")
+
+    def test_hex2char_converts_hex_literal_to_char_concat(self):
+        result = hex2char("username=0x61646d696e")
+        self.assertEqual(
+            result,
+            "username=CONCAT(CHAR(97),CHAR(100),CHAR(109),CHAR(105),CHAR(110))",
+        )
+
+    def test_hex2char_round_trips_with_hex_encode_strings(self):
+        from oobmap.tamper.encoding import hex_encode_strings
+        hex_form = hex_encode_strings("username='admin'")
+        result = hex2char(hex_form)
+        self.assertIn("CHAR(97)", result)
+        self.assertNotIn("0x", result)
+
+    def test_hex2char_noop_without_hex_literal(self):
+        self.assertEqual(hex2char("SELECT 1"), "SELECT 1")

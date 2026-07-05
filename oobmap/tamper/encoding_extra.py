@@ -75,3 +75,24 @@ def overlongutf8(payload: str) -> str:
 
 def overlongutf8more(payload: str) -> str:
     return "".join(_overlong_byte_pair(c) for c in payload)
+
+
+def unmagicquotes(payload: str) -> str:
+    if "'" not in payload:
+        return payload
+    return payload.replace("'", "%bf%27") + "--"
+
+
+_HEX_LITERAL = re.compile(r"\b0x([0-9A-Fa-f]+)\b")
+
+
+def _hex_to_char_concat(match: re.Match) -> str:
+    hex_digits = match.group(1)
+    if len(hex_digits) % 2 != 0:
+        return match.group(0)
+    chars = [str(int(hex_digits[i:i + 2], 16)) for i in range(0, len(hex_digits), 2)]
+    return "CONCAT(" + ",".join(f"CHAR({n})" for n in chars) + ")"
+
+
+def hex2char(payload: str) -> str:
+    return _HEX_LITERAL.sub(_hex_to_char_concat, payload)
