@@ -6,7 +6,7 @@ from ..dbms import DBMS
 from ..oob import InteractshLog, MultiInteractshLog
 from ..payloads import PROFILES
 from ..session import SessionStore
-from ..tamper import TAMPERS, tamper_warnings
+from ..tamper import tamper_warnings, validate_tamper_names
 from ..transport import injection_points, parse_raw_request
 from ..utils.logging import _hi, _log, _sep
 from .detection import normalize_domain
@@ -94,9 +94,7 @@ def check(args) -> int:
             session.close()
 
     tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
-    unknown = [t for t in tamper_names if t not in TAMPERS]
-    if unknown:
-        raise SystemExit(f"unknown tamper(s): {', '.join(unknown)}. Run 'oobmap tampers' for the list.")
+    validate_tamper_names(tamper_names)
     for warning in tamper_warnings(tamper_names, args.dbms):
         _log("WARNING", warning)
     profile = PROFILES[args.dbms]

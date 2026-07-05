@@ -9,7 +9,7 @@ from pathlib import Path
 
 from oobmap.oob import InteractshLog
 from oobmap.core.actions import run_check, check
-from oobmap.core.dispatch import expand_payloads, strip_payload_terminator
+from oobmap.core.dispatch import expand_payloads, load_common, strip_payload_terminator
 from oobmap.core.formatting import split_dump_row
 from oobmap.cli.parser import make_parser
 from oobmap.cli.app import _validate_action_flags
@@ -746,6 +746,47 @@ class CheckCachingTests(unittest.TestCase):
 
             self.assertEqual(rc, 1)
             self.assertNotIn("Using cached check result", buf.getvalue())
+
+
+class TamperValidationIntegrationTests(unittest.TestCase):
+    class Args:
+        def __init__(self, **kw):
+            self.tamper = kw.get("tamper", "")
+            self.dbms = kw.get("dbms", "sqlite-http")
+            self.param = kw.get("param")
+            self.place = kw.get("place", "cookie")
+            self.base = kw.get("base")
+            self.domain = kw.get("domain", "oast.test")
+            self.log = kw.get("log", [])
+            self.run_id = kw.get("run_id")
+            self.output_dir = kw.get("output_dir")
+            self.force_ssl = False
+            self.flush_session = False
+            self.request = kw.get("request")
+
+    def test_check_scan_mode_rejects_unknown_tamper_with_suggestion(self):
+        args = self.Args(tamper="scientfic", param=None)
+        with self.assertRaises(SystemExit) as ctx:
+            check(args)
+        self.assertIn("did you mean 'scientific'", str(ctx.exception))
+
+    def test_load_common_rejects_unknown_tamper_with_suggestion(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_path = Path(tmpdir) / "req.txt"
+            req_path.write_text("GET / HTTP/1.1\nHost: example.test\nCookie: TrackingId=guest\n\n")
+            log_path = Path(tmpdir) / "log.jsonl"
+            log_path.write_text("")
+            args = self.Args(
+                tamper="scientfic",
+                param="TrackingId",
+                place="cookie",
+                request=str(req_path),
+                log=[str(log_path)],
+                output_dir=tmpdir,
+            )
+            with self.assertRaises(SystemExit) as ctx:
+                load_common(args)
+            self.assertIn("did you mean 'scientific'", str(ctx.exception))
 
 
 if __name__ == "__main__":

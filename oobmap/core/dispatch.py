@@ -3,7 +3,7 @@ import uuid
 from ..oob import InteractshLog, MultiInteractshLog
 from ..payloads import PROFILES
 from ..session import SessionStore
-from ..tamper import TAMPERS, apply_tampers, tamper_warnings
+from ..tamper import apply_tampers, tamper_warnings, validate_tamper_names
 from ..transport import inject, parse_raw_request, send
 from ..utils.logging import _log
 from .detection import normalize_domain
@@ -24,9 +24,7 @@ def load_common(args):
         args.base = current_value(request, args.param, args.place)
     session = SessionStore(args.output_dir, request, args.force_ssl, flush=args.flush_session)
     tamper_names = [t.strip() for t in getattr(args, "tamper", "").split(",") if t.strip()]
-    unknown = [t for t in tamper_names if t not in TAMPERS]
-    if unknown:
-        raise SystemExit(f"unknown tamper(s): {', '.join(unknown)}. Run 'oobmap tampers' for the list.")
+    validate_tamper_names(tamper_names)
     for warning in tamper_warnings(tamper_names, getattr(args, "dbms", None)):
         _log("WARNING", warning)
     return profile, request, domain, log, run_id, session
