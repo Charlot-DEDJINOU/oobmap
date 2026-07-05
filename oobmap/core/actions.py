@@ -72,13 +72,22 @@ def run_check(args, profile, request, domain, log, run_id) -> int:
     return 1
 
 
+_STATUS_TO_RC = {"confirmed": 0, "conditional-failed": 2, "not-confirmed": 1}
+
+
 def check(args) -> int:
     if args.param:
         profile, request, domain, log, run_id, session = load_common(args)
         try:
+            check_id = session.check_id(args.dbms, args.place, args.param)
+            cached = None if args.fresh_queries else session.get_check(check_id)
+            if cached:
+                _log("INFO", f"Using cached check result: {cached['status']}")
+                _log("INFO", f"Session: {session.path}")
+                return _STATUS_TO_RC[cached["status"]]
             rc = run_check(args, profile, request, domain, log, run_id)
             status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
-            session.save_check(session.check_id(args.dbms, args.place, args.param), args.dbms, args.place, args.param, status)
+            session.save_check(check_id, args.dbms, args.place, args.param, status)
             _log("INFO", f"Session: {session.path}")
             return rc
         finally:

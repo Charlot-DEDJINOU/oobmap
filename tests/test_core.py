@@ -639,5 +639,65 @@ class ActionableDiagnosticsTests(unittest.TestCase):
             self.assertIn("Try a higher --level", output)
 
 
+class CheckCachingTests(unittest.TestCase):
+    class Args:
+        def __init__(self, **kw):
+            self.base = kw.get("base", "guest")
+            self.true_condition = kw.get("true_condition", "1=1")
+            self.false_condition = kw.get("false_condition", "1=2")
+            self.timeout = kw.get("timeout", 0.05)
+            self.param = kw.get("param", "TrackingId")
+            self.place = kw.get("place", "cookie")
+            self.log = kw.get("log", [])
+            self.domain = kw.get("domain", "oast.test")
+            self.dbms = kw.get("dbms", "sqlite-http")
+            self.verbose = False
+            self.force_ssl = False
+            self.http_timeout = 1.0
+            self.tamper = ""
+            self.payload_suffix = None
+            self.run_id = kw.get("run_id")
+            self.fresh_queries = kw.get("fresh_queries", False)
+            self.first = kw.get("first", False)
+
+    def _write_jsonl(self, content):
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        tmp.write(content)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def _write_request(self, text):
+        tmp = tempfile.NamedTemporaryFile("w", delete=False)
+        tmp.write(text)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def test_single_param_check_uses_cached_result(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_path = self._write_request(
+                "GET / HTTP/1.1\nHost: example.test\nCookie: TrackingId=guest\n\n"
+            )
+            request = parse_raw_request(req_path)
+            session = SessionStore(tmpdir, request, False, flush=False)
+            check_id = session.check_id("sqlite-http", "cookie", "TrackingId")
+            session.save_check(check_id, "sqlite-http", "cookie", "TrackingId", "confirmed")
+            session.close()
+
+            empty_log = self._write_jsonl("")
+            args = self.Args(log=[empty_log])
+            args.request = req_path
+            args.output_dir = tmpdir
+            args.flush_session = False
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check(args)
+
+            self.assertEqual(rc, 0)
+            self.assertIn("Using cached check result", buf.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
