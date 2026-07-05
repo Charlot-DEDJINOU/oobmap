@@ -41,6 +41,8 @@ from oobmap.tamper.keywords_extra import (
     randomcomments,
     lowercase,
     uppercase,
+    luanginx,
+    luanginxmore,
 )
 
 
@@ -501,3 +503,18 @@ class RandomCommentsAndCaseTests(unittest.TestCase):
 
     def test_uppercase_noop_on_non_keyword_text(self):
         self.assertEqual(uppercase("1+1"), "1+1")
+
+
+class LuaNginxTests(unittest.TestCase):
+    def test_luanginx_appends_padding(self):
+        result = luanginx("SELECT 1")
+        self.assertTrue(result.startswith("SELECT 1 -- "))
+        self.assertEqual(len(result), len("SELECT 1 -- ") + 1024)
+
+    def test_luanginxmore_appends_larger_padding(self):
+        result = luanginxmore("SELECT 1")
+        self.assertTrue(result.startswith("SELECT 1 -- "))
+        self.assertEqual(len(result), len("SELECT 1 -- ") + 4096)
+
+    def test_luanginxmore_padding_larger_than_luanginx(self):
+        self.assertGreater(len(luanginxmore("x")), len(luanginx("x")))

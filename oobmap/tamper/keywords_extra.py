@@ -1,5 +1,6 @@
 import random
 import re
+import string
 
 _VERSIONED_KEYWORDS = ["SELECT", "FROM", "WHERE", "AND", "OR", "UNION"]
 _VERSIONED_MORE_KEYWORDS = [
@@ -55,3 +56,15 @@ def lowercase(payload: str) -> str:
 
 def uppercase(payload: str) -> str:
     return _keyword_pattern(_COMMON_KEYWORDS).sub(lambda m: m.group(0).upper(), payload)
+
+
+def _random_padding(length: int) -> str:
+    return "".join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
+
+
+def luanginx(payload: str) -> str:
+    return payload + " -- " + _random_padding(1024)
+
+
+def luanginxmore(payload: str) -> str:
+    return payload + " -- " + _random_padding(4096)
