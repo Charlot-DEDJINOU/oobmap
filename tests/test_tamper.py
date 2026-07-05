@@ -1,6 +1,11 @@
 import unittest
 from oobmap.tamper import apply_tampers, TAMPERS, tamper_warnings
 from oobmap.tamper.rewrites import if2case, ord2ascii, sp_password
+from oobmap.tamper.operators import (
+    between,
+    equaltolike,
+    equaltorlike,
+)
 from oobmap.tamper.encoding_extra import (
     apostrophemask,
     apostrophenullencode,
@@ -548,3 +553,21 @@ class LuaNginxTests(unittest.TestCase):
 
     def test_luanginxmore_padding_larger_than_luanginx(self):
         self.assertGreater(len(luanginxmore("x")), len(luanginx("x")))
+
+
+class BetweenTests(unittest.TestCase):
+    def test_rewrites_greater_than(self):
+        self.assertEqual(between("id>5"), "id NOT BETWEEN 0 AND 5")
+
+    def test_rewrites_equals(self):
+        self.assertEqual(between("id=5"), "id BETWEEN 5 AND 5")
+
+
+class EqualToLikeTests(unittest.TestCase):
+    def test_replaces_equals_with_like(self):
+        self.assertEqual(equaltolike("a=1"), "a LIKE 1")
+
+
+class EqualToRLikeTests(unittest.TestCase):
+    def test_replaces_equals_with_rlike(self):
+        self.assertEqual(equaltorlike("a=1"), "a RLIKE 1")
