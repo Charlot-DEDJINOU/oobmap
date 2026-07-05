@@ -44,3 +44,26 @@ def space2morecomment(payload: str) -> str:
 
 def space2morehash(payload: str) -> str:
     return re.sub(r" ", lambda m: f"#{_random_alnum(12)}\n", payload)
+
+
+_MSSQL_MYSQL_BLANKS = ["%09", "%0a", "%0b", "%0c", "%0d"]
+
+
+def space2mssqlblank(payload: str) -> str:
+    return re.sub(r" ", lambda m: random.choice(_MSSQL_MYSQL_BLANKS), payload)
+
+
+def space2mssqlhash(payload: str) -> str:
+    return payload.replace(" ", "#\n")
+
+
+def space2mysqlblank(payload: str) -> str:
+    return re.sub(r" ", lambda m: random.choice(_MSSQL_MYSQL_BLANKS), payload)
+
+
+def space2mysqldash(payload: str) -> str:
+    return payload.replace(" ", "--\n")
+
+
+def space2plus(payload: str) -> str:
+    return payload.replace(" ", "+")

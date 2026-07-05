@@ -26,6 +26,11 @@ from oobmap.tamper.whitespace_extra import (
     space2hash,
     space2morecomment,
     space2morehash,
+    space2mssqlblank,
+    space2mssqlhash,
+    space2mysqlblank,
+    space2mysqldash,
+    space2plus,
 )
 
 
@@ -385,3 +390,26 @@ class SpaceCommentTests(unittest.TestCase):
         result_hash = space2hash("a b")
         result_morehash = space2morehash("a b")
         self.assertGreater(len(result_morehash), len(result_hash))
+
+
+class SpaceBlankAndDashTests(unittest.TestCase):
+    def test_space2mssqlblank_no_literal_spaces_remain(self):
+        result = space2mssqlblank("a b c")
+        self.assertNotIn(" ", result)
+
+    def test_space2mssqlblank_uses_valid_blank_tokens(self):
+        result = space2mssqlblank("a b")
+        self.assertTrue(any(tok in result for tok in ["%09", "%0a", "%0b", "%0c", "%0d"]))
+
+    def test_space2mssqlhash_replaces_with_fixed_literal(self):
+        self.assertEqual(space2mssqlhash("a b"), "a#\nb")
+
+    def test_space2mysqlblank_no_literal_spaces_remain(self):
+        result = space2mysqlblank("a b c")
+        self.assertNotIn(" ", result)
+
+    def test_space2mysqldash_replaces_with_fixed_literal(self):
+        self.assertEqual(space2mysqldash("a b"), "a--\nb")
+
+    def test_space2plus_replaces_with_plus(self):
+        self.assertEqual(space2plus("a b c"), "a+b+c")
