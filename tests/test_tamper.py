@@ -124,7 +124,19 @@ class TamperTests(unittest.TestCase):
         result = apply_tampers("0x61", ["hex2char"])
         self.assertEqual(result, "CONCAT(CHAR(97))")
 
-    def test_all_twenty_five_tampers_registered(self):
+    def test_space2plus_via_apply_tampers(self):
+        result = apply_tampers("a b", ["space2plus"])
+        self.assertEqual(result, "a+b")
+
+    def test_commentbeforeparentheses_via_apply_tampers(self):
+        result = apply_tampers("SUM(x)", ["commentbeforeparentheses"])
+        self.assertEqual(result, "SUM/**/(x)")
+
+    def test_space2mysqldash_via_apply_tampers(self):
+        result = apply_tampers("a b", ["space2mysqldash"])
+        self.assertEqual(result, "a--\nb")
+
+    def test_all_thirty_seven_tampers_registered(self):
         expected = {"inline-comments", "randomize-case", "between-comments",
                     "hex-encode-strings", "double-url-encode",
                     "url-encode", "space2randomblank",
@@ -133,7 +145,11 @@ class TamperTests(unittest.TestCase):
                     "base64encode", "charunicodeencode", "charunicodeescape",
                     "decentities", "hexentities", "htmlencode",
                     "overlongutf8", "overlongutf8more", "percentage",
-                    "unmagicquotes", "escapequotes", "hex2char"}
+                    "unmagicquotes", "escapequotes", "hex2char",
+                    "bluecoat", "commentbeforeparentheses", "multiplespaces",
+                    "space2dash", "space2hash", "space2morecomment",
+                    "space2morehash", "space2mssqlblank", "space2mssqlhash",
+                    "space2mysqlblank", "space2mysqldash", "space2plus"}
         self.assertEqual(set(TAMPERS.keys()), expected)
 
 

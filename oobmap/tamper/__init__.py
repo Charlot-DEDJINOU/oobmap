@@ -19,6 +19,20 @@ from .encoding_extra import (
     hex2char,
 )
 from .whitespace import inline_comments, space_to_random_blank
+from .whitespace_extra import (
+    bluecoat,
+    commentbeforeparentheses,
+    multiplespaces,
+    space2dash,
+    space2hash,
+    space2morecomment,
+    space2morehash,
+    space2mssqlblank,
+    space2mssqlhash,
+    space2mysqlblank,
+    space2mysqldash,
+    space2plus,
+)
 from .keywords import randomize_case, between_comments
 from .rewrites import if2case, ord2ascii, sp_password
 
@@ -48,6 +62,18 @@ TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
     "unmagicquotes":        (unmagicquotes,        "Replace ' with %bf%27 and append -- to neutralize residue"),
     "escapequotes":         (escapequotes,         "Backslash-escape ' and \""),
     "hex2char":             (hex2char,             "Rewrite 0x<hex> literals as CONCAT(CHAR(...),...)"),
+    "bluecoat":              (bluecoat,               "Replace the space after a keyword with a random blank, then '=' with ' LIKE '"),
+    "commentbeforeparentheses": (commentbeforeparentheses, "Prepend /**/ before every ("),
+    "multiplespaces":        (multiplespaces,         "Wrap AND/OR/SELECT/WHERE/UNION with extra spaces"),
+    "space2dash":            (space2dash,             "Replace spaces with -- plus a random string and newline"),
+    "space2hash":            (space2hash,             "Replace spaces with # plus a random string and newline (MySQL)"),
+    "space2morecomment":     (space2morecomment,      "Replace spaces with /**_**/ (MySQL)"),
+    "space2morehash":        (space2morehash,         "Replace spaces with # plus a longer random string and newline (MySQL)"),
+    "space2mssqlblank":      (space2mssqlblank,       "Replace spaces with a random blank token (%09/%0a/%0b/%0c/%0d)"),
+    "space2mssqlhash":       (space2mssqlhash,        "Replace spaces with # plus a newline"),
+    "space2mysqlblank":      (space2mysqlblank,       "Replace spaces with a random blank token (MySQL)"),
+    "space2mysqldash":       (space2mysqldash,        "Replace spaces with -- plus a newline (MySQL)"),
+    "space2plus":            (space2plus,             "Replace spaces with +"),
 }
 
 

@@ -414,6 +414,18 @@ Current tampers:
 | `unmagicquotes` | Replace `'` with `%bf%27` and append `--` to neutralize residue |
 | `escapequotes` | Backslash-escape `'` and `"` |
 | `hex2char` | Rewrite `0x<hex>` literals as `CONCAT(CHAR(...),...)` |
+| `bluecoat` | Replace the space after a keyword with a random blank, then `=` with ` LIKE ` |
+| `commentbeforeparentheses` | Prepend `/**/` before every `(` |
+| `multiplespaces` | Wrap `AND`/`OR`/`SELECT`/`WHERE`/`UNION` with extra spaces |
+| `space2dash` | Replace spaces with `--` plus a random string and newline |
+| `space2hash` | Replace spaces with `#` plus a random string and newline (MySQL) |
+| `space2morecomment` | Replace spaces with `/**_**/` (MySQL) |
+| `space2morehash` | Replace spaces with `#` plus a longer random string and newline (MySQL) |
+| `space2mssqlblank` | Replace spaces with a random blank token (`%09`/`%0a`/`%0b`/`%0c`/`%0d`) |
+| `space2mssqlhash` | Replace spaces with `#` plus a newline |
+| `space2mysqlblank` | Replace spaces with a random blank token (MySQL) |
+| `space2mysqldash` | Replace spaces with `--` plus a newline (MySQL) |
+| `space2plus` | Replace spaces with `+` |
 
 Chain multiple tampers with a comma-separated list, applied in order:
 
