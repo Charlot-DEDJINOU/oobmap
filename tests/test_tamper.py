@@ -98,11 +98,28 @@ class TamperTests(unittest.TestCase):
         result = apply_tampers("SELECT 1-- -", ["sp_password"])
         self.assertEqual(result, "SELECT 1-- - sp_password")
 
-    def test_all_ten_tampers_registered(self):
+    def test_apostrophemask_via_apply_tampers(self):
+        result = apply_tampers("O'Brien", ["apostrophemask"])
+        self.assertEqual(result, "O%EF%BC%87Brien")
+
+    def test_base64encode_via_apply_tampers(self):
+        result = apply_tampers("admin", ["base64encode"])
+        self.assertEqual(result, "YWRtaW4=")
+
+    def test_hex2char_via_apply_tampers(self):
+        result = apply_tampers("0x61", ["hex2char"])
+        self.assertEqual(result, "CONCAT(CHAR(97))")
+
+    def test_all_twenty_five_tampers_registered(self):
         expected = {"inline-comments", "randomize-case", "between-comments",
                     "hex-encode-strings", "double-url-encode",
                     "url-encode", "space2randomblank",
-                    "if2case", "ord2ascii", "sp_password"}
+                    "if2case", "ord2ascii", "sp_password",
+                    "apostrophemask", "apostrophenullencode", "appendnullbyte",
+                    "base64encode", "charunicodeencode", "charunicodeescape",
+                    "decentities", "hexentities", "htmlencode",
+                    "overlongutf8", "overlongutf8more", "percentage",
+                    "unmagicquotes", "escapequotes", "hex2char"}
         self.assertEqual(set(TAMPERS.keys()), expected)
 
 

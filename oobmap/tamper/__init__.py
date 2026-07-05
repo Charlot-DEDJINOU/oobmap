@@ -1,6 +1,23 @@
 from typing import Callable
 
 from .encoding import hex_encode_strings, double_url_encode, url_encode
+from .encoding_extra import (
+    apostrophemask,
+    apostrophenullencode,
+    appendnullbyte,
+    base64encode,
+    charunicodeencode,
+    charunicodeescape,
+    decentities,
+    hexentities,
+    htmlencode,
+    overlongutf8,
+    overlongutf8more,
+    percentage,
+    unmagicquotes,
+    escapequotes,
+    hex2char,
+)
 from .whitespace import inline_comments, space_to_random_blank
 from .keywords import randomize_case, between_comments
 from .rewrites import if2case, ord2ascii, sp_password
@@ -16,6 +33,21 @@ TAMPERS: dict[str, tuple[Callable[[str], str], str]] = {
     "if2case":            (if2case,               "Rewrite IF(cond,then,else) as CASE WHEN (cond) THEN (then) ELSE (else) END"),
     "ord2ascii":          (ord2ascii,             "Replace ORD() calls with ASCII() (MySQL)"),
     "sp_password":        (sp_password,           "Append 'sp_password' to hide the query from MSSQL logs"),
+    "apostrophemask":       (apostrophemask,       "Replace ' with its UTF-8 fullwidth equivalent"),
+    "apostrophenullencode": (apostrophenullencode, "Replace ' with the illegal double-encoding %00%27"),
+    "appendnullbyte":       (appendnullbyte,       "Append a %00 null byte to the end of the payload"),
+    "base64encode":         (base64encode,         "Base64-encode the entire payload"),
+    "charunicodeencode":    (charunicodeencode,    "Unicode-URL-encode every character as %uXXXX"),
+    "charunicodeescape":    (charunicodeescape,    "Unicode-escape every character as \\uXXXX"),
+    "decentities":          (decentities,          "HTML decimal-encode every character: &#NN;"),
+    "hexentities":          (hexentities,          "HTML hex-encode every character: &#xHH;"),
+    "htmlencode":           (htmlencode,           "HTML decimal-encode non-alphanumeric characters"),
+    "overlongutf8":         (overlongutf8,         "Overlong-UTF8-encode non-alphanumeric characters"),
+    "overlongutf8more":     (overlongutf8more,     "Overlong-UTF8-encode every character"),
+    "percentage":           (percentage,           "Prefix every character with a literal %"),
+    "unmagicquotes":        (unmagicquotes,        "Replace ' with %bf%27 and append -- to neutralize residue"),
+    "escapequotes":         (escapequotes,         "Backslash-escape ' and \""),
+    "hex2char":             (hex2char,             "Rewrite 0x<hex> literals as CONCAT(CHAR(...),...)"),
 }
 
 

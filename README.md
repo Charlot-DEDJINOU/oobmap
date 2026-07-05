@@ -399,6 +399,21 @@ Current tampers:
 | `if2case` | Rewrite `IF(cond,then,else)` as `CASE WHEN (cond) THEN (then) ELSE (else) END` |
 | `ord2ascii` | Replace `ORD()` calls with `ASCII()` (MySQL) |
 | `sp_password` | Append `sp_password` to hide the query from MSSQL logs |
+| `apostrophemask` | Replace `'` with its UTF-8 fullwidth equivalent |
+| `apostrophenullencode` | Replace `'` with the illegal double-encoding `%00%27` |
+| `appendnullbyte` | Append a `%00` null byte to the end of the payload |
+| `base64encode` | Base64-encode the entire payload |
+| `charunicodeencode` | Unicode-URL-encode every character as `%uXXXX` |
+| `charunicodeescape` | Unicode-escape every character as `\uXXXX` |
+| `decentities` | HTML decimal-encode every character: `&#NN;` |
+| `hexentities` | HTML hex-encode every character: `&#xHH;` |
+| `htmlencode` | HTML decimal-encode non-alphanumeric characters |
+| `overlongutf8` | Overlong-UTF8-encode non-alphanumeric characters |
+| `overlongutf8more` | Overlong-UTF8-encode every character |
+| `percentage` | Prefix every character with a literal `%` |
+| `unmagicquotes` | Replace `'` with `%bf%27` and append `--` to neutralize residue |
+| `escapequotes` | Backslash-escape `'` and `"` |
+| `hex2char` | Rewrite `0x<hex>` literals as `CONCAT(CHAR(...),...)` |
 
 Chain multiple tampers with a comma-separated list, applied in order:
 
