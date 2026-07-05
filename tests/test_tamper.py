@@ -13,6 +13,8 @@ from oobmap.tamper.encoding_extra import (
     htmlencode,
     charunicodeencode,
     charunicodeescape,
+    overlongutf8,
+    overlongutf8more,
 )
 
 
@@ -258,3 +260,14 @@ class UnicodeEncodeTests(unittest.TestCase):
 
     def test_charunicodeescape_basic(self):
         self.assertEqual(charunicodeescape("AB"), "\\u0041\\u0042")
+
+
+class OverlongUtf8Tests(unittest.TestCase):
+    def test_overlongutf8_encodes_apostrophe(self):
+        self.assertEqual(overlongutf8("'"), "%C0%A7")
+
+    def test_overlongutf8_skips_alphanumeric(self):
+        self.assertEqual(overlongutf8("A'B"), "A%C0%A7B")
+
+    def test_overlongutf8more_encodes_alphanumeric_too(self):
+        self.assertEqual(overlongutf8more("A"), "%C1%81")

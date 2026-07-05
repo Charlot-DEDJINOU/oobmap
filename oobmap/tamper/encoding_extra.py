@@ -60,3 +60,18 @@ def charunicodeencode(payload: str) -> str:
 
 def charunicodeescape(payload: str) -> str:
     return _unicode_encode(payload, "\\u%04X")
+
+
+def _overlong_byte_pair(c: str) -> str:
+    cp = ord(c)
+    b1 = 0xC0 | (cp >> 6)
+    b2 = 0x80 | (cp & 0x3F)
+    return f"%{b1:02X}%{b2:02X}"
+
+
+def overlongutf8(payload: str) -> str:
+    return "".join(_overlong_byte_pair(c) if not c.isalnum() else c for c in payload)
+
+
+def overlongutf8more(payload: str) -> str:
+    return "".join(_overlong_byte_pair(c) for c in payload)
