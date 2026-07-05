@@ -119,11 +119,17 @@ def check(args) -> int:
         candidate_args.param = point.name
         candidate_args.place = point.place
         candidate_args.base = point.value
-        run_id = f"{args.run_id or uuid.uuid4().hex[:6]}-{point.place[:1]}{abs(hash((point.place, point.name))) % 10000}"
-        print()
-        rc = run_check(candidate_args, profile, request, domain, log, run_id)
-        status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
-        session.save_check(session.check_id(args.dbms, point.place, point.name), args.dbms, point.place, point.name, status)
+        check_id = session.check_id(args.dbms, point.place, point.name)
+        cached = None if args.fresh_queries else session.get_check(check_id)
+        if cached:
+            _log("INFO", f"Using cached check result for --place {point.place} -p {point.name}: {cached['status']}")
+            rc = _STATUS_TO_RC[cached["status"]]
+        else:
+            run_id = f"{args.run_id or uuid.uuid4().hex[:6]}-{point.place[:1]}{abs(hash((point.place, point.name))) % 10000}"
+            print()
+            rc = run_check(candidate_args, profile, request, domain, log, run_id)
+            status = "confirmed" if rc == 0 else "conditional-failed" if rc == 2 else "not-confirmed"
+            session.save_check(check_id, args.dbms, point.place, point.name, status)
         if rc == 0:
             _log("INFO", _hi(f"Injectable OOB point: --place {point.place} -p {point.name}"))
             found = True

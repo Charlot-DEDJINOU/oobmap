@@ -698,6 +698,55 @@ class CheckCachingTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("Using cached check result", buf.getvalue())
 
+    def test_scan_mode_check_uses_cached_result(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_path = self._write_request(
+                "GET / HTTP/1.1\nHost: example.test\nCookie: TrackingId=guest\n\n"
+            )
+            request = parse_raw_request(req_path)
+            session = SessionStore(tmpdir, request, False, flush=False)
+            check_id = session.check_id("sqlite-http", "cookie", "TrackingId")
+            session.save_check(check_id, "sqlite-http", "cookie", "TrackingId", "confirmed")
+            session.close()
+
+            empty_log = self._write_jsonl("")
+            args = self.Args(param=None, log=[empty_log])
+            args.request = req_path
+            args.output_dir = tmpdir
+            args.flush_session = False
+            args.level = 2
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check(args)
+
+            self.assertEqual(rc, 0)
+            self.assertIn("Using cached check result", buf.getvalue())
+
+    def test_fresh_queries_bypasses_check_cache(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_path = self._write_request(
+                "GET / HTTP/1.1\nHost: example.test\nCookie: TrackingId=guest\n\n"
+            )
+            request = parse_raw_request(req_path)
+            session = SessionStore(tmpdir, request, False, flush=False)
+            check_id = session.check_id("sqlite-http", "cookie", "TrackingId")
+            session.save_check(check_id, "sqlite-http", "cookie", "TrackingId", "confirmed")
+            session.close()
+
+            empty_log = self._write_jsonl("")
+            args = self.Args(run_id="run3", log=[empty_log], fresh_queries=True)
+            args.request = req_path
+            args.output_dir = tmpdir
+            args.flush_session = False
+
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check(args)
+
+            self.assertEqual(rc, 1)
+            self.assertNotIn("Using cached check result", buf.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

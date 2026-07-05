@@ -321,7 +321,7 @@ Useful options:
 ```bash
 --output-dir DIR     # store sessions somewhere else
 --flush-session     # delete the current target session before running
---fresh-queries     # ignore cached extraction values but keep other session data
+--fresh-queries     # ignore cached extraction/catalog/check values but keep other session data
 ```
 
 `--dump` validates the target table and columns against the current session/catalog.
@@ -345,6 +345,13 @@ oobmap ... --expr "SELECT DB_NAME()" --output-dir ./oobmap-output
 oobmap ... --expr "SELECT DB_NAME()" --flush-session
 oobmap ... --expr "SELECT DB_NAME()" --fresh-queries
 ```
+
+`--check` also reads through the session cache: re-running `--check`
+against the same target/dbms/place/param (or the same scan) reuses the
+previously recorded outcome — `confirmed`, `conditional-failed`, or
+`not-confirmed` — instead of re-sending OOB probes, and prints
+`Using cached check result: <status>` so it's clear the value came from
+cache. Use `--fresh-queries` to force a fresh probe.
 
 ## Payload Profiles
 
