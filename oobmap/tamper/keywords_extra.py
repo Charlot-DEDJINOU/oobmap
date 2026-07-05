@@ -1,3 +1,4 @@
+import random
 import re
 
 _VERSIONED_KEYWORDS = ["SELECT", "FROM", "WHERE", "AND", "OR", "UNION"]
@@ -33,3 +34,24 @@ def modsecurityversioned(payload: str) -> str:
 
 def modsecurityzeroversioned(payload: str) -> str:
     return f"/*!00000{payload}*/"
+
+
+_COMMON_KEYWORDS = ["SELECT", "FROM", "WHERE", "AND", "OR", "UNION", "EXEC", "CAST"]
+
+
+def randomcomments(payload: str) -> str:
+    def repl(m: re.Match) -> str:
+        word = m.group(0)
+        if len(word) < 2:
+            return word
+        pos = random.randint(1, len(word) - 1)
+        return word[:pos] + "/**/" + word[pos:]
+    return _keyword_pattern(_COMMON_KEYWORDS).sub(repl, payload)
+
+
+def lowercase(payload: str) -> str:
+    return _keyword_pattern(_COMMON_KEYWORDS).sub(lambda m: m.group(0).lower(), payload)
+
+
+def uppercase(payload: str) -> str:
+    return _keyword_pattern(_COMMON_KEYWORDS).sub(lambda m: m.group(0).upper(), payload)

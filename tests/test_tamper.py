@@ -38,6 +38,9 @@ from oobmap.tamper.keywords_extra import (
     halfversionedmorekeywords,
     modsecurityversioned,
     modsecurityzeroversioned,
+    randomcomments,
+    lowercase,
+    uppercase,
 )
 
 
@@ -476,3 +479,25 @@ class ModsecurityCommentTests(unittest.TestCase):
 
     def test_modsecurityzeroversioned_wraps_with_zero_version(self):
         self.assertEqual(modsecurityzeroversioned("SELECT 1"), "/*!00000SELECT 1*/")
+
+
+class RandomCommentsAndCaseTests(unittest.TestCase):
+    def test_randomcomments_breaks_keyword_contiguity(self):
+        result = randomcomments("SELECT 1")
+        self.assertNotIn("SELECT", result)
+        self.assertIn("/**/", result)
+
+    def test_randomcomments_noop_without_keyword(self):
+        self.assertEqual(randomcomments("1+1"), "1+1")
+
+    def test_lowercase_lowercases_keyword(self):
+        self.assertEqual(lowercase("SELECT 1"), "select 1")
+
+    def test_lowercase_noop_on_already_lowercase(self):
+        self.assertEqual(lowercase("select 1"), "select 1")
+
+    def test_uppercase_uppercases_keyword(self):
+        self.assertEqual(uppercase("select 1"), "SELECT 1")
+
+    def test_uppercase_noop_on_non_keyword_text(self):
+        self.assertEqual(uppercase("1+1"), "1+1")
