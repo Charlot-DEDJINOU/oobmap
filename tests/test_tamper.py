@@ -10,6 +10,8 @@ from oobmap.tamper.operators import (
     symboliclogical,
     binary,
     scientific,
+    plus2concat,
+    plus2fnconcat,
 )
 from oobmap.tamper.encoding_extra import (
     apostrophemask,
@@ -616,3 +618,16 @@ class ScientificTests(unittest.TestCase):
 
     def test_multiple_integers(self):
         self.assertEqual(scientific("a=1 AND b=2"), "a=1e0 AND b=2e0")
+
+
+class Plus2ConcatTests(unittest.TestCase):
+    def test_rewrites_literal_plus_identifier(self):
+        self.assertEqual(plus2concat("'a'+b"), "CONCAT('a',b)")
+
+    def test_rewrites_identifier_plus_literal(self):
+        self.assertEqual(plus2concat("col+'x'"), "CONCAT(col,'x')")
+
+
+class Plus2FnConcatTests(unittest.TestCase):
+    def test_rewrites_with_odbc_function_escape(self):
+        self.assertEqual(plus2fnconcat("'a'+b"), "{fn CONCAT('a',b)}")

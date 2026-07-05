@@ -42,3 +42,15 @@ def binary(payload: str) -> str:
 
 def scientific(payload: str) -> str:
     return re.sub(r"\b(\d+)\b", r"\1e0", payload)
+
+
+_CONCAT_OPERAND = r"('[^']*'|\w+)"
+_PLUS_CONCAT = re.compile(_CONCAT_OPERAND + r"\s*\+\s*" + _CONCAT_OPERAND)
+
+
+def plus2concat(payload: str) -> str:
+    return _PLUS_CONCAT.sub(lambda m: f"CONCAT({m.group(1)},{m.group(2)})", payload)
+
+
+def plus2fnconcat(payload: str) -> str:
+    return _PLUS_CONCAT.sub(lambda m: "{fn CONCAT(" + f"{m.group(1)},{m.group(2)}" + ")}", payload)
