@@ -1,5 +1,6 @@
 import unittest
 
+from oobmap.core.detection import _DBMS_DISPLAY, _DETECT_ORDER
 from oobmap.dbms import DBMS, METADATA, sql_string
 from oobmap.payloads import PROFILES
 
@@ -164,6 +165,12 @@ class NewProfileTests(unittest.TestCase):
 
     def test_mssql_openrowset_metadata_matches_parent(self):
         self.assertEqual(METADATA["mssql-openrowset"], METADATA["mssql"])
+
+    def test_mssql_openrowset_has_display_name(self):
+        self.assertEqual(_DBMS_DISPLAY["mssql-openrowset"], "Microsoft SQL Server")
+
+    def test_mssql_openrowset_not_in_detect_order(self):
+        self.assertNotIn("mssql-openrowset", _DETECT_ORDER)
 
 
 class DbsExpressionTests(unittest.TestCase):

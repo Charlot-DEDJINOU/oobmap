@@ -22,6 +22,7 @@ _DBMS_DISPLAY = {
     "mysql-stacked":    "MySQL",
     "mssql":            "Microsoft SQL Server",
     "mssql-cmdshell":   "Microsoft SQL Server",
+    "mssql-openrowset": "Microsoft SQL Server",
     "postgres-program": "PostgreSQL",
     "postgres-dblink":  "PostgreSQL",
     "oracle-http":      "Oracle",
