@@ -152,6 +152,19 @@ class NewProfileTests(unittest.TestCase):
             p.direct_payload("base", "SELECT password FROM users", "run-d", "oast.test")
         )
 
+    def test_mssql_openrowset_in_dbms_and_metadata(self):
+        self.assertIn("mssql-openrowset", DBMS)
+        self.assertIn("mssql-openrowset", METADATA)
+
+    def test_mssql_openrowset_table_expr_matches_parent(self):
+        self.assertEqual(
+            DBMS["mssql-openrowset"].table_expression(0),
+            DBMS["mssql"].table_expression(0),
+        )
+
+    def test_mssql_openrowset_metadata_matches_parent(self):
+        self.assertEqual(METADATA["mssql-openrowset"], METADATA["mssql"])
+
 
 class DbsExpressionTests(unittest.TestCase):
     def test_mysql_dbs_expression_offset(self):

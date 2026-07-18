@@ -14,6 +14,7 @@ _FAMILY_MODULES = {
 # Variant aliases: which family module a variant profile name delegates to.
 _FAMILY_OF = {
     "mssql-cmdshell": "mssql",
+    "mssql-openrowset": "mssql",
     "mysql-stacked": "mysql",
     "postgres-dblink": "postgres-program",
     "oracle-dns": "oracle-http",
@@ -64,6 +65,7 @@ METADATA = {name: dict(module.METADATA) for name, module in _FAMILY_MODULES.item
 
 METADATA["postgres-dblink"] = METADATA["postgres-program"]
 METADATA["mssql-cmdshell"] = METADATA["mssql"]
+METADATA["mssql-openrowset"] = METADATA["mssql"]
 METADATA["mysql-stacked"] = METADATA["mysql"]
 METADATA["oracle-dns"] = METADATA["oracle-http"]
 
