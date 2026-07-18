@@ -30,6 +30,7 @@ def _terminator_variants(payloads: list[str]) -> list[str]:
 _ENGINE_MODULES = {
     "mssql": mssql,
     "mssql-cmdshell": mssql,
+    "mssql-openrowset": mssql,
     "mysql": mysql,
     "mysql-stacked": mysql,
     "postgres-program": postgres,
@@ -129,6 +130,14 @@ PROFILES = {
         "mssql-cmdshell",
         "MSSQL xp_cmdshell nslookup callback — alternative when xp_dirtree is blocked",
         "Requires: EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE.",
+    ),
+    "mssql-openrowset": Profile(
+        "mssql-openrowset",
+        "MSSQL OPENROWSET DNS callback — the Linux-compatible alternative when "
+        "xp_dirtree/xp_cmdshell are unavailable",
+        "Requires: EXEC sp_configure 'Ad Hoc Distributed Queries', 1; RECONFIGURE. "
+        "Works on SQL Server for Linux, where xp_dirtree/xp_cmdshell do not "
+        "resolve outbound DNS.",
     ),
     "mysql-stacked": Profile(
         "mysql-stacked",

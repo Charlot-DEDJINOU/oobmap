@@ -119,6 +119,39 @@ class NewProfileTests(unittest.TestCase):
         self.assertIn("UTL_INADDR.GET_HOST_ADDRESS", joined)
         self.assertNotIn("UTL_HTTP.REQUEST", joined)
 
+    def test_mssql_openrowset_profile_exists(self):
+        self.assertIn("mssql-openrowset", PROFILES)
+
+    def test_mssql_openrowset_payload_uses_if_exec_openrowset(self):
+        p = PROFILES["mssql-openrowset"]
+        payload = p.payload("base", "1=1", "tok.oast.site")
+        self.assertIn("OPENROWSET", payload)
+        self.assertIn("EXEC(", payload)
+        self.assertIn("IF (1=1)", payload)
+        self.assertIn("tok.oast.site", payload)
+        # inner OPENROWSET quotes must be doubled inside the EXEC string literal
+        self.assertIn("''SQLNCLI''", payload)
+        # must NOT use the Windows-only vectors
+        self.assertNotIn("xp_dirtree", payload)
+        self.assertNotIn("xp_cmdshell", payload)
+
+    def test_mssql_openrowset_payloads_full_covers_providers_and_terminators(self):
+        p = PROFILES["mssql-openrowset"]
+        variants = p.payloads("base", "1=1", "tok.oast.site", risk=2)
+        # 3 providers x 2 terminators = 6 distinct variants
+        self.assertEqual(len(variants), 6)
+        joined = "\n".join(variants)
+        for provider in ("SQLNCLI", "MSOLEDBSQL", "SQLOLEDB"):
+            self.assertIn(f"''{provider}''", joined)
+        self.assertTrue(any(v.endswith("-- -") for v in variants))
+        self.assertTrue(any(v.endswith("/*") for v in variants))
+
+    def test_mssql_openrowset_no_direct_payload(self):
+        p = PROFILES["mssql-openrowset"]
+        self.assertIsNone(
+            p.direct_payload("base", "SELECT password FROM users", "run-d", "oast.test")
+        )
+
 
 class DbsExpressionTests(unittest.TestCase):
     def test_mysql_dbs_expression_offset(self):
