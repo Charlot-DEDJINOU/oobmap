@@ -44,8 +44,13 @@ def run(args) -> int:
         args.dbms = _detect_dbms(args)
         if not args.dbms:
             raise SystemExit(
-                "could not auto-detect DBMS — no OOB callback received for any engine. "
-                "Specify --dbms explicitly or check your --domain/--log setup."
+                "could not auto-detect DBMS — no OOB callback from any profile "
+                "(all engines and their variants were tried). Check outbound "
+                "DNS/HTTP egress and your --domain/--log setup; some variants "
+                "also need target-side prerequisites (e.g. mssql-openrowset "
+                "needs 'Ad Hoc Distributed Queries' enabled). If the injection "
+                "point has trailing SQL, add --payload-suffix. Or specify "
+                "--dbms explicitly."
             )
     elif args.dbms not in PROFILES:
         raise SystemExit(

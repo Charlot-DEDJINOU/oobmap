@@ -270,6 +270,23 @@ DBMS/profile, never disables `--validate`, and never enables stacked-query,
 `xp_cmdshell`, or `dblink` behavior — pick `--dbms mysql-stacked`,
 `--dbms mssql-cmdshell`, or `--dbms postgres-dblink` explicitly for that.
 
+### DBMS auto-detection
+
+When you omit `--dbms`, `oobmap` probes every profile to identify the
+engine — the primary profile per engine first (`mysql`, `mssql`,
+`postgres-program`, `oracle-http`, `sqlite-http`), then the remaining
+variant profiles (`mssql-cmdshell`, `mssql-openrowset`, `mysql-stacked`,
+`postgres-dblink`, `oracle-dns`, in no particular order) — and stops at
+the first one that produces a callback, using it for the rest of the run. This means
+auto-detection can find a target even when only a variant technique works
+(for example `mssql-openrowset` against SQL Server for Linux, where
+`xp_dirtree` produces no callback). Any `--payload-suffix` you pass is
+applied during detection too, so detection matches what the attack will
+send. The trade-off is time: with nothing responding, auto-detection
+waits once per profile (up to ~10 callback timeouts) before giving up —
+acceptable for an unattended auto-scan. Pass `--dbms` explicitly to skip
+detection entirely.
+
 Force a location:
 
 ```bash
