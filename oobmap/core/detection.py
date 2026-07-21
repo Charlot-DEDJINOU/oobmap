@@ -41,6 +41,15 @@ def _detection_candidates() -> list[str]:
     return primaries + variants
 
 
+def _detection_payloads(args, profile, base: str, callback_host: str) -> list[str]:
+    """Always-true (1=1) detection payloads for a profile, with any
+    --payload-suffix applied — the same expansion --check/extraction use,
+    so detection probes match what the actual attack will send."""
+    from .dispatch import expand_payloads  # local: dispatch imports detection
+    base_payloads = profile.payloads(base, "1=1", callback_host, risk=getattr(args, "risk", 2))
+    return expand_payloads(args, base_payloads)
+
+
 def _detect_dbms(args) -> str | None:
     request = parse_raw_request(args.request)
     domain = normalize_domain(args.domain)
@@ -74,7 +83,7 @@ def _detect_dbms(args) -> str | None:
         base = base or ""
 
         token = f"{run_id}-detect-{profile_name}"
-        for payload in profile.payloads(base, "1=1", f"{token}.{domain}", risk=getattr(args, "risk", 2)):
+        for payload in _detection_payloads(args, profile, base, f"{token}.{domain}"):
             if tamper_names:
                 payload = apply_tampers(payload, tamper_names)
 

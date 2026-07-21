@@ -12,7 +12,7 @@ from oobmap.oob import InteractshLog
 from oobmap.core.actions import run_check, check
 from oobmap.core.dispatch import expand_payloads, load_common, strip_payload_terminator
 from oobmap.core.formatting import split_dump_row
-from oobmap.core.detection import _detect_dbms, _detection_candidates, _DETECT_ORDER
+from oobmap.core.detection import _detect_dbms, _detection_candidates, _detection_payloads, _DETECT_ORDER
 from oobmap.cli.parser import make_parser
 from oobmap.cli.app import _validate_action_flags
 from oobmap.transport import RawRequest, current_value, inject, injection_points, parse_raw_request
@@ -877,6 +877,32 @@ class DetectDbmsIntegrationTests(unittest.TestCase):
             with contextlib.redirect_stdout(buf):
                 result = _detect_dbms(args)
         self.assertEqual(result, "mssql-openrowset")
+
+
+class DetectionPayloadsSuffixTests(unittest.TestCase):
+    class Args:
+        def __init__(self, payload_suffix=None):
+            self.payload_suffix = payload_suffix
+            self.risk = 2
+
+    def test_no_suffix_returns_base_payloads(self):
+        profile = PROFILES["mssql-openrowset"]
+        args = self.Args(payload_suffix=None)
+        result = _detection_payloads(args, profile, "guest", "tok.oast.test")
+        expected = profile.payloads("guest", "1=1", "tok.oast.test", risk=2)
+        self.assertEqual(result, expected)
+
+    def test_suffix_is_appended_with_terminator_stripped(self):
+        profile = PROFILES["mssql-openrowset"]
+        suffix = ";SELECT 1 FROM dbo.users u WHERE '1'='1"
+        args = self.Args(payload_suffix=[suffix])
+        result = _detection_payloads(args, profile, "guest", "tok.oast.test")
+        # at least one variant ends with the custom suffix (its own -- - / /* terminator stripped)
+        self.assertTrue(any(p.endswith(suffix) for p in result))
+        # and the un-suffixed base variants are still present
+        base = profile.payloads("guest", "1=1", "tok.oast.test", risk=2)
+        for b in base:
+            self.assertIn(b, result)
 
 
 if __name__ == "__main__":
