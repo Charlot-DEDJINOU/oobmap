@@ -6,11 +6,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from oobmap.oob import InteractshLog
 from oobmap.core.actions import run_check, check
 from oobmap.core.dispatch import expand_payloads, load_common, strip_payload_terminator
 from oobmap.core.formatting import split_dump_row
+from oobmap.core.detection import _detect_dbms, _detection_candidates, _DETECT_ORDER
 from oobmap.cli.parser import make_parser
 from oobmap.cli.app import _validate_action_flags
 from oobmap.transport import RawRequest, current_value, inject, injection_points, parse_raw_request
@@ -797,6 +799,84 @@ class TamperValidationIntegrationTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as ctx:
                 load_common(args)
             self.assertIn("did you mean 'scientific'", str(ctx.exception))
+
+
+class DetectionCandidatesTests(unittest.TestCase):
+    def test_primaries_come_first_in_detect_order(self):
+        candidates = _detection_candidates()
+        expected_primaries = [p for p in _DETECT_ORDER if p in PROFILES]
+        self.assertEqual(candidates[:len(expected_primaries)], expected_primaries)
+
+    def test_covers_every_profile_without_duplicates(self):
+        candidates = _detection_candidates()
+        self.assertEqual(set(candidates), set(PROFILES))
+        self.assertEqual(len(candidates), len(PROFILES))
+
+    def test_variants_follow_primaries(self):
+        candidates = _detection_candidates()
+        primaries = [p for p in _DETECT_ORDER if p in PROFILES]
+        variants = candidates[len(primaries):]
+        self.assertNotIn("mssql", variants)
+        self.assertIn("mssql-openrowset", variants)
+        self.assertIn("mssql-cmdshell", variants)
+
+
+class DetectDbmsIntegrationTests(unittest.TestCase):
+    def _write(self, suffix, content=""):
+        tmp = tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False)
+        tmp.write(content)
+        tmp.close()
+        self.addCleanup(lambda: Path(tmp.name).unlink(missing_ok=True))
+        return tmp.name
+
+    def _args(self, log_path):
+        class Args:
+            pass
+        a = Args()
+        a.request = self._write(".txt",
+            "GET / HTTP/1.1\nHost: example.test\nCookie: TrackingId=guest\n\n")
+        a.domain = "oast.test"
+        a.log = [log_path]
+        a.run_id = "det1"
+        a.param = "TrackingId"
+        a.place = "cookie"
+        a.base = "guest"
+        a.force_ssl = False
+        a.http_timeout = 1.0
+        a.timeout = 0.05
+        a.tamper = ""
+        a.payload_suffix = None
+        a.risk = 2
+        a.level = 2
+        return a
+
+    def test_empty_log_probes_all_and_returns_none(self):
+        log_path = self._write(".jsonl", "")
+        args = self._args(log_path)
+        with mock.patch("oobmap.core.detection.send"):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                result = _detect_dbms(args)
+        self.assertIsNone(result)
+        # every profile was probed — its name shows in a "No callback" line
+        out = buf.getvalue()
+        self.assertIn("mssql-openrowset", out)
+        self.assertIn("postgres-dblink", out)
+
+    def test_identifies_variant_when_only_variant_responds(self):
+        log_path = self._write(".jsonl", "")
+        args = self._args(log_path)
+
+        def fake_wait_any(self, token_map, timeout):
+            token = next(iter(token_map))
+            return token if "detect-mssql-openrowset" in token else None
+
+        with mock.patch("oobmap.core.detection.send"), \
+             mock.patch("oobmap.oob.InteractshLog.wait_any", fake_wait_any):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                result = _detect_dbms(args)
+        self.assertEqual(result, "mssql-openrowset")
 
 
 if __name__ == "__main__":

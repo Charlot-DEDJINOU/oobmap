@@ -31,6 +31,16 @@ _DBMS_DISPLAY = {
 }
 
 
+def _detection_candidates() -> list[str]:
+    """Auto-detection probe order: the primary profile per engine first
+    (fast path for common targets), then every remaining variant profile.
+    Variants are derived from PROFILES so a new profile joins the probe
+    list automatically."""
+    primaries = [p for p in _DETECT_ORDER if p in PROFILES]
+    variants = [p for p in PROFILES if p not in _DETECT_ORDER]
+    return primaries + variants
+
+
 def _detect_dbms(args) -> str | None:
     request = parse_raw_request(args.request)
     domain = normalize_domain(args.domain)
@@ -50,9 +60,11 @@ def _detect_dbms(args) -> str | None:
         args.place = points[0].place
         _log("INFO", f"Auto-selected injection point: {args.param} ({args.place})")
 
-    candidates = [p for p in _DETECT_ORDER if p in PROFILES]
-    display_names = list(dict.fromkeys(_DBMS_DISPLAY.get(p, p) for p in candidates))
-    _log("INFO", f"DBMS not specified — probing {len(display_names)} engines: {', '.join(display_names)}")
+    candidates = _detection_candidates()
+    engines = list(dict.fromkeys(_DBMS_DISPLAY.get(p, p) for p in candidates))
+    _log("INFO",
+         f"DBMS not specified — probing {len(candidates)} profiles across "
+         f"{len(engines)} engines: {', '.join(engines)}")
 
     for profile_name in candidates:
         profile = PROFILES[profile_name]
@@ -75,10 +87,10 @@ def _detect_dbms(args) -> str | None:
                 pass
 
         hit = log.wait_any({token: profile_name}, args.timeout)
+        display = _DBMS_DISPLAY.get(profile_name, profile_name)
         if hit:
-            display = _DBMS_DISPLAY.get(profile_name, profile_name)
-            _log("INFO", _hi(f"identified DBMS: {display}"))
+            _log("INFO", _hi(f"identified DBMS: {display} ({profile_name})"))
             return profile_name
-        _log("DEBUG", f"No callback — {_DBMS_DISPLAY.get(profile_name, profile_name)}")
+        _log("DEBUG", f"No callback — {display} ({profile_name})")
 
     return None
